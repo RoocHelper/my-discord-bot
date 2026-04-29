@@ -10,7 +10,7 @@ if (!port) {
 }
 app.listen(port, () => console.log('Web server started'));
 
-// The intents array is now ACTUALLY filled with the required permissions inside brackets
+// The intents array is now properly filled with the required permissions
 const client = new Client({
     intents:
 });
