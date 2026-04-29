@@ -9,7 +9,7 @@ let port = process.env.PORT |
 | 3000;
 app.listen(port, () => console.log('Web server started'));
 
-// We must provide an array of intents inside the brackets
+// Requesting only the most basic permissions to prevent crashes
 const client = new Client({
     intents:
 });
@@ -18,4 +18,8 @@ client.once('ready', () => {
     console.log(`Success! Logged in as ${client.user.tag}`);
 });
 
-client.login(process.env.DISCORD_TOKEN);
+// We added a.catch() here. If the login fails, it prints the error instead of crashing.
+client.login(process.env.DISCORD_TOKEN).catch(error => {
+    console.log("LOGIN ERROR: Could not connect to Discord.");
+    console.error(error);
+});
