@@ -6,8 +6,7 @@ app.get('/', (req, res) => res.send('My bot is awake!'));
 
 let port = process.env.PORT;
 if (!port) {
-    port = 3000;
-}
+    port = 3000;}
 app.listen(port, () => console.log('Web server started'));
 
 // The intents array is now properly filled out
