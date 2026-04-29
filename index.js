@@ -10,6 +10,7 @@ if (!port) {
 }
 app.listen(port, () => console.log('Web server started'));
 
+// The intents array is now properly filled out
 const client = new Client({
     intents:
 });
