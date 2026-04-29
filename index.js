@@ -8,9 +8,9 @@ app.listen(process.env.PORT |
 
 | 3000, () => console.log('Web server started'));
 
-// This creates your Discord bot
+// This creates your Discord bot with the correct intents
 const client = new Client({ 
-  intents: 
+  intents:
 });
 
 client.once('ready', () => {
