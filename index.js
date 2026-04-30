@@ -49,10 +49,9 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
     
-    // 1. IF SOMEONE TYPES A COMMAND
+    // --- 1. IF SOMEONE TYPES A COMMAND ---
     if (interaction.isChatInputCommand()) {
         
-        // --- CREATE RAID COMMAND ---
         if (interaction.commandName === 'raid') {
             const eventId = Date.now().toString();
             const customTitle = interaction.options.getString('title');
@@ -84,7 +83,6 @@ client.on('interactionCreate', async (interaction) => {
             raidData[eventId].channelId = reply.channelId;
         }
 
-        // --- EDIT RAID COMMAND ---
         if (interaction.commandName === 'editraid') {
             const eventId = interaction.options.getString('event_id');
             const newDateString = interaction.options.getString('new_date');
@@ -110,7 +108,7 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 2. IF SOMEONE CLICKS A BUTTON OR DROPDOWN
+    // --- 2. IF SOMEONE CLICKS A BUTTON OR DROPDOWN ---
     let isButton = interaction.isButton();
     let isMenu = interaction.isStringSelectMenu();
 
@@ -121,89 +119,109 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
+// THE MAGIC CLICK HANDLER
 async function processClick(interaction, isButton) {
-    const parts = interaction.customId.split('_');
-    let eventId;
-    let choice;
+    try {
+        // INSTANTLY ACKNOWLEDGE the click so Discord never throws the 3-second timeout error
+        await interaction.deferUpdate();
 
-    if (isButton) {
-        eventId = parts[1];
-        choice = parts[2];
-    } else {
-        eventId = parts[2];
-        choice = interaction.values.at(0);
-    }
+        const parts = interaction.customId.split('_');
+        let eventId;
+        let choice;
 
-    // --- THE FIX: We use an array check here instead of the broken | symbols! ---
-    const lateStatuses = new Array('Late', 'RemoveLate');
-    if (lateStatuses.includes(choice)) {
-        return interaction.reply({ content: "⏱️ Your status has been noted!", ephemeral: true });
-    }
-
-    // Read the existing message directly from Discord
-    const receivedEmbed = interaction.message.embeds.at(0);
-    const fields = receivedEmbed.fields;
-
-    const parseField = (index) => {
-        const value = fields[index].value;
-        if (value === '-') {
-            return new Array();
+        if (isButton) {
+            eventId = parts.at(2);
+            choice = parts.at(1);
+        } else {
+            eventId = parts.at(1);
+            choice = interaction.values.at(0);
         }
-        return value.split('\n');
-    };
 
-    const event = {
-        limits: { Sniper: 5, Priest: 2, Paladin: 1, DancerBard: 1, Bio: 1 },
-        players: {
-            Sniper: parseField(0),
-            Priest: parseField(1),
-            Paladin: parseField(2),
-            DancerBard: parseField(3),
-            Bio: parseField(4),
-            Bench: parseField(6),
-            Absent: parseField(7)
+        const lateStatuses = new Array('Late', 'RemoveLate');
+        if (lateStatuses.includes(choice)) {
+            // Because we used deferUpdate() above, we must use followUp() instead of reply()
+            return interaction.followUp({ content: "⏱️ Your status has been noted!", ephemeral: true });
         }
-    };
 
-    const userName = interaction.user.username;
+        // Read the existing message directly from Discord
+        const receivedEmbed = interaction.message.embeds.at(0);
+        const fields = receivedEmbed.fields;
 
-    for (const key in event.players) {
-        event.players[key] = event.players[key].filter(name => name!== userName);
-    }
+        const parseField = (index) => {
+            const value = fields.at(index).value;
+            if (value === '-') {
+                return new Array();
+            }
+            return value.split('\n');
+        };
 
-    if (event.limits[choice]) {
-        if (event.players[choice].length >= event.limits[choice]) {
-            return interaction.reply({ content: `❌ The **${choice}** role is already full!`, ephemeral: true });
+        const event = {
+            limits: { Sniper: 5, Priest: 2, Paladin: 1, DancerBard: 1, Bio: 1 },
+            players: {
+                Sniper: parseField(0),
+                Priest: parseField(1),
+                Paladin: parseField(2),
+                DancerBard: parseField(3),
+                Bio: parseField(4),
+                Bench: parseField(6),
+                Absent: parseField(7)
+            }
+        };
+
+        const userName = interaction.user.username;
+
+        // Remove user from all lists to prevent double signups
+        for (const key in event.players) {
+            event.players[key] = event.players[key].filter(name => name!== userName);
         }
+
+        // Check if the role is full
+        if (event.limits[choice]) {
+            if (event.players[choice].length >= event.limits[choice]) {
+                return interaction.followUp({ content: `❌ The **${choice}** role is already full!`, ephemeral: true });
+            }
+        }
+
+        // Add them to the chosen role
+        event.players[choice].push(userName);
+
+        const roleTotal = event.players.Sniper.length + event.players.Priest.length + event.players.Paladin.length + event.players.DancerBard.length + event.players.Bio.length;
+        const statusTotal = event.players.Bench.length + event.players.Absent.length;
+        const grandTotal = roleTotal + statusTotal;
+
+        const oldFooter = receivedEmbed.footer.text;
+        const timeLine = oldFooter.split('\n').at(2); 
+
+        const formatList = (list) => list.length > 0? list.join('\n') : '-';
+        
+        // Rebuild the embed with the new names
+        const newEmbed = new EmbedBuilder()
+         .setTitle(receivedEmbed.title)
+         .setColor('#F1C40F')
+         .setDescription(receivedEmbed.description)
+         .addFields(
+                { name: `🎯 Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
+                { name: `⛑️ Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
+                { name: `🛡️ Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
+                { name: `🎸 DancerBard (${event.players.DancerBard.length}/${event.limits.DancerBard})`, value: formatList(event.players.DancerBard), inline: true },
+                { name: `🧪 Bio (${event.players.Bio.length}/${event.limits.Bio})`, value: formatList(event.players.Bio), inline: true },
+                { name: '\u200b', value: '----------------------------------------', inline: false },
+                { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
+                { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
+            )
+         .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
+
+        // Update the original message instantly
+        await interaction.editReply({ embeds: new Array(newEmbed) });
+
+        // Send the backup to Google Sheets in the background
+        await backupToGoogleSheets(`'${eventId}`, userName, choice); 
+
+    } catch (error) {
+        // If anything breaks, it will tell you EXACTLY what happened instead of failing silently!
+        console.log("CLICK ERROR:", error);
+        await interaction.followUp({ content: `❌ Error caught: ${error.message}`, ephemeral: true });
     }
-
-    event.players[choice].push(userName);
-
-    const roleTotal = event.players.Sniper.length + event.players.Priest.length + event.players.Paladin.length + event.players.DancerBard.length + event.players.Bio.length;
-    const statusTotal = event.players.Bench.length + event.players.Absent.length;
-    const grandTotal = roleTotal + statusTotal;
-
-    const oldFooter = receivedEmbed.footer.text;
-    const timeLine = oldFooter.split('\n')[1]; 
-
-    const formatList = (list) => list.length > 0? list.join('\n') : '-';
-    
-    const newEmbed = EmbedBuilder.from(receivedEmbed)
-      .setFields(
-            { name: `🎯 Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
-            { name: `⛑️ Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
-            { name: `🛡️ Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
-            { name: `🎸 DancerBard (${event.players.DancerBard.length}/${event.limits.DancerBard})`, value: formatList(event.players.DancerBard), inline: true },
-            { name: `🧪 Bio (${event.players.Bio.length}/${event.limits.Bio})`, value: formatList(event.players.Bio), inline: true },
-            { name: '\u200b', value: '----------------------------------------', inline: false },
-            { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
-            { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
-        )
-      .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
-
-    await interaction.update({ embeds: new Array(newEmbed) });
-
-    await backupToGoogleSheets(`'${eventId}`, userName, choice); 
 }
 
 // --- GOOGLE SHEETS BACKUP ENGINE ---
@@ -243,25 +261,21 @@ function generateRaidEmbed(eventId) {
     const exactTime = `<t:${event.time}:t>`;
     const relativeTime = `<t:${event.time}:R>`;
 
-    const roleTotal = event.players.Sniper.length + event.players.Priest.length + event.players.Paladin.length + event.players.DancerBard.length + event.players.Bio.length;
-    const statusTotal = event.players.Bench.length + event.players.Absent.length;
-    const grandTotal = roleTotal + statusTotal;
-
     return new EmbedBuilder()
-  .setTitle(event.title)
-  .setColor('#F1C40F')
-  .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
-  .addFields(
-            { name: `🎯 Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
-            { name: `⛑️ Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
-            { name: `🛡️ Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
-            { name: `🎸 DancerBard (${event.players.DancerBard.length}/${event.limits.DancerBard})`, value: formatList(event.players.DancerBard), inline: true },
-            { name: `🧪 Bio (${event.players.Bio.length}/${event.limits.Bio})`, value: formatList(event.players.Bio), inline: true },
+     .setTitle(event.title)
+     .setColor('#F1C40F')
+     .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
+     .addFields(
+            { name: `🎯 Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
+            { name: `⛑️ Priest (0/${event.limits.Priest})`, value: '-', inline: true },
+            { name: `🛡️ Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
+            { name: `🎸 DancerBard (0/${event.limits.DancerBard})`, value: '-', inline: true },
+            { name: `🧪 Bio (0/${event.limits.Bio})`, value: '-', inline: true },
             { name: '\u200b', value: '----------------------------------------', inline: false },
-            { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
-            { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
+            { name: `🪑 Bench (0)`, value: '-', inline: true },
+            { name: `🅰️ Absent (0)`, value: '-', inline: true }
         )
-  .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
+     .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
 }
 
 // HELPER FUNCTION: DRAWS THE BUTTONS & DROPDOWN
@@ -276,9 +290,9 @@ function generateRaidComponents(eventId) {
 
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-      .setCustomId(`status_${eventId}`)
-      .setPlaceholder('Select a status')
-      .addOptions(
+         .setCustomId(`status_${eventId}`)
+         .setPlaceholder('Select a status')
+         .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
