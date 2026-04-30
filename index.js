@@ -49,19 +49,62 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
     
-    // --- 1. IF SOMEONE TYPES A COMMAND ---
     if (interaction.isChatInputCommand()) {
         
+        // --- CREATE RAID COMMAND ---
         if (interaction.commandName === 'raid') {
-            const eventId = Date.now().toString();
+            // We tell Discord to wait a moment while we check Google Sheets for the next ID
+            await interaction.deferReply(); 
+
+            let eventId = "1"; // Default starting ID
             const customTitle = interaction.options.getString('title');
             const customDateString = interaction.options.getString('date');
             
             const parsedDate = chrono.parseDate(customDateString);
             if (!parsedDate) {
-                return interaction.reply({ content: '❌ I could not understand that date format. Try "tomorrow at 9pm".', ephemeral: true });
+                return interaction.editReply({ content: '❌ I could not understand that date format. Try "tomorrow at 9pm".' });
             }
             const unixTime = Math.floor(parsedDate.getTime() / 1000);
+
+            // AUTO-INCREMENT ID LOGIC: Check Google Sheets for the highest number
+            try {
+                const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+                const key = process.env.GOOGLE_PRIVATE_KEY;
+                const sheetId = process.env.GOOGLE_SHEET_ID;
+
+                if (email) {
+                    if (key) {
+                        if (sheetId) {
+                            const serviceAccountAuth = new JWT({
+                                email: email,
+                                key: key.replace(/\\n/g, '\n'),
+                                scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
+                            });
+                            const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
+                            await doc.loadInfo();
+                            const sheet = doc.sheetsByIndex.at(0);
+                            const rows = await sheet.getRows();
+
+                            let lastId = 0;
+                            if (rows.length > 0) {
+                                // Find the highest ID number currently in the sheet
+                                for (let i = 0; i < rows.length; i++) {
+                                    let rowId = parseInt(String(rows.at(i).get('EventID')).replace("'", ""));
+                                    if (rowId > lastId) {
+                                        lastId = rowId;
+                                    }
+                                }
+                            }
+                            // Add 1 to the highest number we found
+                            let nextIdNum = lastId + 1;
+                            eventId = nextIdNum.toString();
+                        }
+                    }
+                }
+            } catch (error) {
+                console.log("Could not fetch ID, defaulting to timestamp.", error);
+                eventId = Date.now().toString(); 
+            }
 
             raidData[eventId] = {
                 title: customTitle,
@@ -78,11 +121,13 @@ client.on('interactionCreate', async (interaction) => {
             const embed = generateRaidEmbed(eventId);
             const components = generateRaidComponents(eventId);
 
-            const reply = await interaction.reply({ embeds: new Array(embed), components: components, fetchReply: true });
+            // Post the final raid box
+            const reply = await interaction.editReply({ embeds: new Array(embed), components: components });
             raidData[eventId].messageId = reply.id;
             raidData[eventId].channelId = reply.channelId;
         }
 
+        // --- EDIT RAID COMMAND ---
         if (interaction.commandName === 'editraid') {
             const eventId = interaction.options.getString('event_id');
             const newDateString = interaction.options.getString('new_date');
@@ -119,7 +164,6 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// THE MAGIC CLICK HANDLER
 async function processClick(interaction, isButton) {
     try {
         await interaction.deferUpdate();
@@ -133,15 +177,13 @@ async function processClick(interaction, isButton) {
             eventId = parts.at(1);
             choice = interaction.values.at(0);
         } else {
-            // It is either a 'role' button or an 'admin' button
             choice = parts.at(1);
             eventId = parts.at(2);
         }
 
-        // --- NEW: CLOSE EVENT LOGIC ---
+        // CLOSE EVENT LOGIC
         if (action === 'admin') {
             if (choice === 'close') {
-                // Ensure the user is an admin to click this 
                 let hasPerms = interaction.member.permissions.has(PermissionFlagsBits.ManageMessages);
                 if (!hasPerms) {
                     return interaction.followUp({ content: "❌ You don't have permission to close this event.", ephemeral: true });
@@ -149,10 +191,9 @@ async function processClick(interaction, isButton) {
 
                 const receivedEmbed = interaction.message.embeds.at(0);
                 const closedEmbed = EmbedBuilder.from(receivedEmbed)
-                   .setTitle(` ${receivedEmbed.title}`)
-                   .setColor('#E74C3C');
+                  .setTitle(` ${receivedEmbed.title}`)
+                  .setColor('#E74C3C');
 
-                // Edit the message, and send an empty Array for components to delete all buttons! 
                 await interaction.editReply({ embeds: new Array(closedEmbed), components: new Array() });
                 return interaction.followUp({ content: "✅ Event closed successfully! No one else can sign up.", ephemeral: true });
             }
@@ -163,7 +204,6 @@ async function processClick(interaction, isButton) {
             return interaction.followUp({ content: "⏱️ Your status has been noted!", ephemeral: true });
         }
 
-        // Read the existing message directly from Discord
         const receivedEmbed = interaction.message.embeds.at(0);
         const fields = receivedEmbed.fields;
 
@@ -176,6 +216,7 @@ async function processClick(interaction, isButton) {
         };
 
         const event = {
+            title: receivedEmbed.title,
             limits: { Sniper: 5, Priest: 2, Paladin: 1, DancerBard: 1, Bio: 1 },
             players: {
                 Sniper: parseField(0),
@@ -190,19 +231,17 @@ async function processClick(interaction, isButton) {
 
         const userName = interaction.user.username;
 
-        // Remove user from all lists to prevent double signups
+        // Remove user from all lists
         for (const key in event.players) {
             event.players[key] = event.players[key].filter(name => name!== userName);
         }
 
-        // Check if the role is full
         if (event.limits[choice]) {
             if (event.players[choice].length >= event.limits[choice]) {
                 return interaction.followUp({ content: `❌ The **${choice}** role is already full!`, ephemeral: true });
             }
         }
 
-        // Add them to the chosen role
         event.players[choice].push(userName);
 
         const roleTotal = event.players.Sniper.length + event.players.Priest.length + event.players.Paladin.length + event.players.DancerBard.length + event.players.Bio.length;
@@ -214,12 +253,11 @@ async function processClick(interaction, isButton) {
 
         const formatList = (list) => list.length > 0? list.join('\n') : '-';
         
-        // Rebuild the embed with the new names
         const newEmbed = new EmbedBuilder()
-           .setTitle(receivedEmbed.title)
-           .setColor('#F1C40F')
-           .setDescription(receivedEmbed.description)
-           .addFields(
+          .setTitle(event.title)
+          .setColor('#F1C40F')
+          .setDescription(receivedEmbed.description)
+          .addFields(
                 { name: `🎯 Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
                 { name: `⛑️ Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
                 { name: `🛡️ Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
@@ -229,12 +267,12 @@ async function processClick(interaction, isButton) {
                 { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
                 { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
             )
-           .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
+          .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
 
         await interaction.editReply({ embeds: new Array(newEmbed) });
 
-        // Backup to Google Sheets
-        await backupToGoogleSheets(`'${eventId}`, userName, choice); 
+        // Pass the Title into the Google Sheets backup!
+        await backupToGoogleSheets(`'${eventId}`, event.title, userName, choice); 
 
     } catch (error) {
         console.log("CLICK ERROR:", error);
@@ -243,7 +281,7 @@ async function processClick(interaction, isButton) {
 }
 
 // --- GOOGLE SHEETS BACKUP ENGINE ---
-async function backupToGoogleSheets(eventId, username, role) {
+async function backupToGoogleSheets(eventId, eventTitle, username, role) {
     const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
     const key = process.env.GOOGLE_PRIVATE_KEY;
     const sheetId = process.env.GOOGLE_SHEET_ID;
@@ -263,24 +301,18 @@ async function backupToGoogleSheets(eventId, username, role) {
         await doc.loadInfo();
         const sheet = doc.sheetsByIndex.at(0); 
         
-        // --- NEW: FETCH AND UPDATE LOGIC ---
-        // Fetch existing rows to see if the user is already on the sheet
         const rows = await sheet.getRows();
-        
-        // Safe check to strip the apostrophe from the EventID for comparison
         const safeEventId = String(eventId).replace("'", "");
         const existingRow = rows.find(r => String(r.get('EventID')).replace("'", "") === safeEventId && r.get('User') === username);
 
         if (existingRow) {
-            // If they are already on the sheet, we overwrite their old class! 
             existingRow.set('Role', role);
+            existingRow.set('Title', eventTitle); // Updates the Title column!
             existingRow.set('Time', new Date().toLocaleString());
             await existingRow.save(); 
-            console.log(`Updated ${username} in Google Sheets!`);
         } else {
-            // If this is their first time clicking, add a new row
-            await sheet.addRow({ EventID: eventId, User: username, Role: role, Time: new Date().toLocaleString() });
-            console.log(`Added new row for ${username} in Google Sheets!`);
+            // Adds the Title column on the first sign up!
+            await sheet.addRow({ EventID: eventId, Title: eventTitle, User: username, Role: role, Time: new Date().toLocaleString() });
         }
         
     } catch (error) {
@@ -288,7 +320,6 @@ async function backupToGoogleSheets(eventId, username, role) {
     }
 }
 
-// HELPER FUNCTION: DRAWS THE COLORED BOX
 function generateRaidEmbed(eventId) {
     const event = raidData[eventId];
     const formatList = (list) => list.length > 0? list.join('\n') : '-';
@@ -298,10 +329,10 @@ function generateRaidEmbed(eventId) {
     const relativeTime = `<t:${event.time}:R>`;
 
     return new EmbedBuilder()
-       .setTitle(event.title)
-       .setColor('#F1C40F')
-       .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
-       .addFields(
+      .setTitle(event.title)
+      .setColor('#F1C40F')
+      .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
+      .addFields(
             { name: `🎯 Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
             { name: `⛑️ Priest (0/${event.limits.Priest})`, value: '-', inline: true },
             { name: `🛡️ Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
@@ -311,12 +342,10 @@ function generateRaidEmbed(eventId) {
             { name: `🪑 Bench (0)`, value: '-', inline: true },
             { name: `🅰️ Absent (0)`, value: '-', inline: true }
         )
-       .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
+      .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
 }
 
-// HELPER FUNCTION: DRAWS THE BUTTONS & DROPDOWN
 function generateRaidComponents(eventId) {
-    // Row 1: The Classes
     const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`role_Sniper_${eventId}`).setLabel('Sniper').setEmoji('🎯').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`role_Priest_${eventId}`).setLabel('Priest').setEmoji('⛑️').setStyle(ButtonStyle.Secondary),
@@ -325,12 +354,11 @@ function generateRaidComponents(eventId) {
         new ButtonBuilder().setCustomId(`role_Bio_${eventId}`).setLabel('Bio').setEmoji('🧪').setStyle(ButtonStyle.Secondary)
     );
 
-    // Row 2: The Status Menu
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-           .setCustomId(`status_${eventId}`)
-           .setPlaceholder('Select a status')
-           .addOptions(
+          .setCustomId(`status_${eventId}`)
+          .setPlaceholder('Select a status')
+          .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
@@ -338,12 +366,10 @@ function generateRaidComponents(eventId) {
            )
     );
 
-    // Row 3: Admin Controls
     const adminControls = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`admin_close_${eventId}`).setLabel('Close Event').setEmoji('🔒').setStyle(ButtonStyle.Danger)
     );
 
-    // We now attach all 3 rows to the message
     return new Array(buttons, selectMenu, adminControls);
 }
 
