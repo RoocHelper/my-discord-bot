@@ -10,7 +10,7 @@ if (!port) {
 }
 app.listen(port, () => console.log('Web server started'));
 
-// The intents array is now properly filled with the required permissions
+// The intents array is now completely filled out with the required permissions
 const client = new Client({
     intents:
 });
@@ -19,7 +19,6 @@ client.once('ready', () => {
     console.log(`Success! Logged in as ${client.user.tag}`);
 });
 
-// Added an error catcher just in case the token is invalid
 client.login(process.env.DISCORD_TOKEN).catch(error => {
     console.log("LOGIN ERROR: Could not connect to Discord.");
     console.error(error);
