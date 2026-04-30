@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
 const express = require('express');
 const { JWT } = require('google-auth-library');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
@@ -122,24 +122,44 @@ client.on('interactionCreate', async (interaction) => {
 // THE MAGIC CLICK HANDLER
 async function processClick(interaction, isButton) {
     try {
-        // INSTANTLY ACKNOWLEDGE the click so Discord never throws the 3-second timeout error
         await interaction.deferUpdate();
 
         const parts = interaction.customId.split('_');
+        let action = parts.at(0);
         let eventId;
         let choice;
 
-        if (isButton) {
-            eventId = parts.at(2);
-            choice = parts.at(1);
-        } else {
+        if (action === 'status') {
             eventId = parts.at(1);
             choice = interaction.values.at(0);
+        } else {
+            // It is either a 'role' button or an 'admin' button
+            choice = parts.at(1);
+            eventId = parts.at(2);
+        }
+
+        // --- NEW: CLOSE EVENT LOGIC ---
+        if (action === 'admin') {
+            if (choice === 'close') {
+                // Ensure the user is an admin to click this 
+                let hasPerms = interaction.member.permissions.has(PermissionFlagsBits.ManageMessages);
+                if (!hasPerms) {
+                    return interaction.followUp({ content: "❌ You don't have permission to close this event.", ephemeral: true });
+                }
+
+                const receivedEmbed = interaction.message.embeds.at(0);
+                const closedEmbed = EmbedBuilder.from(receivedEmbed)
+                   .setTitle(` ${receivedEmbed.title}`)
+                   .setColor('#E74C3C');
+
+                // Edit the message, and send an empty Array for components to delete all buttons! 
+                await interaction.editReply({ embeds: new Array(closedEmbed), components: new Array() });
+                return interaction.followUp({ content: "✅ Event closed successfully! No one else can sign up.", ephemeral: true });
+            }
         }
 
         const lateStatuses = new Array('Late', 'RemoveLate');
         if (lateStatuses.includes(choice)) {
-            // Because we used deferUpdate() above, we must use followUp() instead of reply()
             return interaction.followUp({ content: "⏱️ Your status has been noted!", ephemeral: true });
         }
 
@@ -196,10 +216,10 @@ async function processClick(interaction, isButton) {
         
         // Rebuild the embed with the new names
         const newEmbed = new EmbedBuilder()
-         .setTitle(receivedEmbed.title)
-         .setColor('#F1C40F')
-         .setDescription(receivedEmbed.description)
-         .addFields(
+           .setTitle(receivedEmbed.title)
+           .setColor('#F1C40F')
+           .setDescription(receivedEmbed.description)
+           .addFields(
                 { name: `🎯 Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
                 { name: `⛑️ Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
                 { name: `🛡️ Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
@@ -209,16 +229,14 @@ async function processClick(interaction, isButton) {
                 { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
                 { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
             )
-         .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
+           .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
 
-        // Update the original message instantly
         await interaction.editReply({ embeds: new Array(newEmbed) });
 
-        // Send the backup to Google Sheets in the background
+        // Backup to Google Sheets
         await backupToGoogleSheets(`'${eventId}`, userName, choice); 
 
     } catch (error) {
-        // If anything breaks, it will tell you EXACTLY what happened instead of failing silently!
         console.log("CLICK ERROR:", error);
         await interaction.followUp({ content: `❌ Error caught: ${error.message}`, ephemeral: true });
     }
@@ -245,8 +263,26 @@ async function backupToGoogleSheets(eventId, username, role) {
         await doc.loadInfo();
         const sheet = doc.sheetsByIndex.at(0); 
         
-        await sheet.addRow({ EventID: eventId, User: username, Role: role, Time: new Date().toLocaleString() });
-        console.log(`Saved ${username} to Google Sheets!`);
+        // --- NEW: FETCH AND UPDATE LOGIC ---
+        // Fetch existing rows to see if the user is already on the sheet
+        const rows = await sheet.getRows();
+        
+        // Safe check to strip the apostrophe from the EventID for comparison
+        const safeEventId = String(eventId).replace("'", "");
+        const existingRow = rows.find(r => String(r.get('EventID')).replace("'", "") === safeEventId && r.get('User') === username);
+
+        if (existingRow) {
+            // If they are already on the sheet, we overwrite their old class! 
+            existingRow.set('Role', role);
+            existingRow.set('Time', new Date().toLocaleString());
+            await existingRow.save(); 
+            console.log(`Updated ${username} in Google Sheets!`);
+        } else {
+            // If this is their first time clicking, add a new row
+            await sheet.addRow({ EventID: eventId, User: username, Role: role, Time: new Date().toLocaleString() });
+            console.log(`Added new row for ${username} in Google Sheets!`);
+        }
+        
     } catch (error) {
         console.log("Google Sheets Error:", error);
     }
@@ -262,10 +298,10 @@ function generateRaidEmbed(eventId) {
     const relativeTime = `<t:${event.time}:R>`;
 
     return new EmbedBuilder()
-     .setTitle(event.title)
-     .setColor('#F1C40F')
-     .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
-     .addFields(
+       .setTitle(event.title)
+       .setColor('#F1C40F')
+       .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
+       .addFields(
             { name: `🎯 Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
             { name: `⛑️ Priest (0/${event.limits.Priest})`, value: '-', inline: true },
             { name: `🛡️ Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
@@ -275,11 +311,12 @@ function generateRaidEmbed(eventId) {
             { name: `🪑 Bench (0)`, value: '-', inline: true },
             { name: `🅰️ Absent (0)`, value: '-', inline: true }
         )
-     .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
+       .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
 }
 
 // HELPER FUNCTION: DRAWS THE BUTTONS & DROPDOWN
 function generateRaidComponents(eventId) {
+    // Row 1: The Classes
     const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`role_Sniper_${eventId}`).setLabel('Sniper').setEmoji('🎯').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`role_Priest_${eventId}`).setLabel('Priest').setEmoji('⛑️').setStyle(ButtonStyle.Secondary),
@@ -288,11 +325,12 @@ function generateRaidComponents(eventId) {
         new ButtonBuilder().setCustomId(`role_Bio_${eventId}`).setLabel('Bio').setEmoji('🧪').setStyle(ButtonStyle.Secondary)
     );
 
+    // Row 2: The Status Menu
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-         .setCustomId(`status_${eventId}`)
-         .setPlaceholder('Select a status')
-         .addOptions(
+           .setCustomId(`status_${eventId}`)
+           .setPlaceholder('Select a status')
+           .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
@@ -300,7 +338,13 @@ function generateRaidComponents(eventId) {
            )
     );
 
-    return new Array(buttons, selectMenu);
+    // Row 3: Admin Controls
+    const adminControls = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`admin_close_${eventId}`).setLabel('Close Event').setEmoji('🔒').setStyle(ButtonStyle.Danger)
+    );
+
+    // We now attach all 3 rows to the message
+    return new Array(buttons, selectMenu, adminControls);
 }
 
 client.login(process.env.DISCORD_TOKEN).catch(error => {
