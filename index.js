@@ -4,21 +4,18 @@ const express = require('express');
 const app = express();
 app.get('/', (req, res) => res.send('My bot is awake!'));
 
-let port = process.env.PORT;
-if (!port) {
-    port = 3000;
-}
+let port = process.env.PORT |
+
+| 3000;
 app.listen(port, () => console.log('Web server started'));
 
+// Connect to Discord
 const client = new Client({
-    intents: Object.keys(GatewayIntentBits).map((a) => {
-        return GatewayIntentBits[a] 
-    })
+    intents:
 });
 
 // --- BOT MEMORY ---
 // This stores the player limits and the names of who signed up.
-// (Note: Because this is simple memory, it will clear if Render goes to sleep/restarts)
 const raidData = {};
 
 client.once('ready', async () => {
@@ -36,16 +33,14 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'raid') {
             
-            // Generate a unique ID for this specific raid
             const eventId = Date.now().toString();
 
-            // Setup the team limits and empty lists in the bot's memory
+            // FIXED: Added the brackets so JavaScript knows these are empty lists!
             raidData[eventId] = {
                 limits: { Sniper: 5, Priest: 2, Paladin: 1, DancerBard: 1, Bio: 1 },
                 players: { Sniper:, Priest:, Paladin:, DancerBard:, Bio:, Bench:, Absent: }
             };
 
-            // Build the visual box and buttons using our helper functions below
             const embed = generateRaidEmbed(eventId);
             const components = generateRaidComponents(eventId);
 
@@ -58,28 +53,27 @@ client.on('interactionCreate', async (interaction) => {
 
 | interaction.isStringSelectMenu()) {
         
-        // We attached the eventId to the buttons, let's extract it
         const parts = interaction.customId.split('_');
         const eventId = interaction.isButton()? parts[1] : parts[2];
         
         // Figure out what class or status they clicked
         const choice = interaction.isButton()? parts[2] : interaction.values;
 
-        // Find the raid in the bot's memory
         const event = raidData[eventId];
 
         // If the raid is missing (bot restarted), give an error
         if (!event) {
-            return interaction.reply({ content: "❌ This event expired because the bot restarted.", ephemeral: true });
+            return interaction.reply({ content: "❌ This event expired.", ephemeral: true });
         }
 
-        // Handle the "Late" statuses from your dropdown image (Hidden message only for now)
+        // Handle the "Late" statuses from your dropdown image 
         if (choice === 'Late' |
 
 | choice === 'RemoveLate') {
             return interaction.reply({ content: `⏱️ Your status has been noted as: **${choice}**!`, ephemeral: true });
         }
 
+        // Get the user's name
         const userName = interaction.user.username;
 
         // PREVENT DOUBLE SIGN-UPS: Remove the user from ALL lists first
@@ -92,13 +86,13 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply({ content: `❌ The **${choice}** role is already full!`, ephemeral: true });
         }
 
-        // ADD THEM TO THE TEAM: Put their name in the correct list
+        // ADD THEM TO THE TEAM
         event.players[choice].push(userName);
 
-        // RE-DRAW THE BOX: Re-generate the embed with the new names
+        // RE-DRAW THE BOX
         const updatedEmbed = generateRaidEmbed(eventId);
 
-        // UPDATE THE MESSAGE: This instantly changes the old box to the new box!
+        // THIS IS THE MAGIC: Instantly update the message box to show their name!
         await interaction.update({ embeds: [updatedEmbed] });
     }
 });
@@ -106,15 +100,13 @@ client.on('interactionCreate', async (interaction) => {
 // --- HELPER FUNCTION: DRAWS THE COLORED BOX ---
 function generateRaidEmbed(eventId) {
     const event = raidData[eventId];
-
-    // A tiny tool to format the names cleanly, or show a '-' if nobody signed up yet
     const formatList = (list) => list.length > 0? list.join('\n') : '-';
 
     return new EmbedBuilder()
-       .setTitle("FREYA NIGHTMARE JUM'AT")
-       .setColor('#F1C40F')
-       .setDescription('**Event Info:**\n📅 5/1/2026\n🕒 9:00 PM - None\n\n')
-       .addFields(
+      .setTitle("FREYA NIGHTMARE JUM'AT")
+      .setColor('#F1C40F')
+      .setDescription('**Event Info:**\n📅 5/1/2026\n🕒 9:00 PM - None\n\n')
+      .addFields(
             { name: `🎯 Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
             { name: `⛑️ Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
             { name: `🛡️ Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
@@ -124,7 +116,7 @@ function generateRaidEmbed(eventId) {
             { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
             { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
         )
-       .setFooter({ text: `Event ID: ${eventId}\nEvent start time • Tomorrow at 9:00 PM` });
+      .setFooter({ text: `Event ID: ${eventId}\nEvent start time • Tomorrow at 9:00 PM` });
 }
 
 // --- HELPER FUNCTION: DRAWS THE BUTTONS & DROPDOWN ---
@@ -137,12 +129,17 @@ function generateRaidComponents(eventId) {
         new ButtonBuilder().setCustomId(`role_Bio_${eventId}`).setLabel('Bio').setEmoji('🧪').setStyle(ButtonStyle.Secondary)
     );
 
-    // This matches the dropdown menu from your second image!
+    // Added the actual dropdown options from your image!
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-           .setCustomId(`status_${eventId}`)
-           .setPlaceholder('Select a status')
-           .addOptions()
+          .setCustomId(`status_${eventId}`)
+          .setPlaceholder('Select a status')
+          .addOptions(
+                { label: 'Bench', value: 'Bench', emoji: '🪑' },
+                { label: 'Absent', value: 'Absent', emoji: '🅰️' },
+                { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
+                { label: 'Late (+5 min)', value: 'Late', emoji: '⏱️' }
+           )
     );
 
     return [buttons, selectMenu];
