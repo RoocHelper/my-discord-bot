@@ -4,14 +4,12 @@ const express = require('express');
 const app = express();
 app.get('/', (req, res) => res.send('My bot is awake!'));
 
-// Avoiding the problematic symbols for the port
 let port = process.env.PORT;
 if (!port) {
     port = 3000;
 }
 app.listen(port, () => console.log('Web server started'));
 
-// Avoiding empty brackets for intents
 const client = new Client({
     intents: new Array(
         GatewayIntentBits.Guilds,
@@ -25,9 +23,25 @@ const raidData = {};
 
 client.once('ready', async () => {
     console.log(`Success! Logged in as ${client.user.tag}`);
+    
+    // WE UPGRADED THIS: Now the command asks you for a Title and a Time!
     await client.application.commands.create({
         name: 'raid',
         description: 'Create a Raid-Helper style event!',
+        options: new Array(
+            {
+                name: 'title',
+                description: 'What is the name of the raid?',
+                type: 3, // 3 means STRING (text input)
+                required: true
+            },
+            {
+                name: 'date',
+                description: 'When is it? (Format example: May 1 2026 21:00)',
+                type: 3, 
+                required: true
+            }
+        )
     });
     console.log('Raid command created!');
 });
@@ -39,8 +53,16 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.commandName === 'raid') {
             const eventId = Date.now().toString();
 
-            // Avoiding square brackets for empty lists so they don't disappear when copying
+            // Capture the custom title and date the admin typed in
+            const customTitle = interaction.options.getString('title');
+            const customDateString = interaction.options.getString('date');
+            
+            // Convert the typed date into a Unix Timestamp for Discord
+            const unixTime = Math.floor(new Date(customDateString).getTime() / 1000);
+
             raidData[eventId] = {
+                title: customTitle,
+                time: unixTime,
                 limits: { Sniper: 5, Priest: 2, Paladin: 1, DancerBard: 1, Bio: 1 },
                 players: {
                     Sniper: new Array(),
@@ -60,7 +82,7 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 2. IF SOMEONE CLICKS A BUTTON OR DROPDOWN (Avoiding the problematic OR symbol)
+    // 2. IF SOMEONE CLICKS A BUTTON OR DROPDOWN
     let isButton = interaction.isButton();
     let isMenu = interaction.isStringSelectMenu();
 
@@ -87,8 +109,9 @@ async function processClick(interaction, isButton) {
 
     const event = raidData[eventId];
 
+    // UPDATED ERROR MESSAGE: To explain why it expired
     if (!event) {
-        return interaction.reply({ content: "❌ This event expired.", ephemeral: true });
+        return interaction.reply({ content: "❌ This event expired (The bot restarted and wiped its temporary memory).", ephemeral: true });
     }
 
     if (choice === 'Late') {
@@ -99,7 +122,7 @@ async function processClick(interaction, isButton) {
 
     const userName = interaction.user.username;
 
-    // Remove user from all other roles first to prevent double sign-ups
+    // Remove user from all other roles first
     for (const key in event.players) {
         event.players[key] = event.players[key].filter(name => name!== userName);
     }
@@ -124,11 +147,15 @@ function generateRaidEmbed(eventId) {
     const event = raidData[eventId];
     const formatList = (list) => list.length > 0? list.join('\n') : '-';
 
+    // We use Discord's magic <t:TIME:F> trick to automatically show the viewer's local timezone
+    const timeDisplay = `<t:${event.time}:F>`;
+    const relativeTime = `<t:${event.time}:R>`;
+
     return new EmbedBuilder()
-     .setTitle("FREYA NIGHTMARE JUM'AT")
-     .setColor('#F1C40F')
-     .setDescription('**Event Info:**\n📅 5/1/2026\n🕒 9:00 PM - None\n\n')
-     .addFields(
+    .setTitle(event.title) // It now uses your custom title!
+    .setColor('#F1C40F')
+    .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 Starts ${relativeTime}\n\n`)
+    .addFields(
             { name: `🎯 Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
             { name: `⛑️ Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
             { name: `🛡️ Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
@@ -138,7 +165,7 @@ function generateRaidEmbed(eventId) {
             { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
             { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
         )
-     .setFooter({ text: `Event ID: ${eventId}\nEvent start time • Tomorrow at 9:00 PM` });
+    .setFooter({ text: `Event ID: ${eventId}` });
 }
 
 // HELPER FUNCTION: DRAWS THE BUTTONS & DROPDOWN
@@ -153,9 +180,9 @@ function generateRaidComponents(eventId) {
 
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-         .setCustomId(`status_${eventId}`)
-         .setPlaceholder('Select a status')
-         .addOptions(
+        .setCustomId(`status_${eventId}`)
+        .setPlaceholder('Select a status')
+        .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
