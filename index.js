@@ -174,7 +174,7 @@ async function processClick(interaction, isButton) {
             eventId = parts.at(2);
         }
 
-        // --- CLOSE EVENT LOGIC ---
+// --- CLOSE EVENT LOGIC ---
         if (action === 'admin') {
             if (choice === 'close') {
                 let hasPerms = interaction.member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -184,10 +184,14 @@ async function processClick(interaction, isButton) {
 
                 const receivedEmbed = interaction.message.embeds.at(0);
                 const closedEmbed = EmbedBuilder.from(receivedEmbed)
-                 .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
-                 .setColor('#E74C3C'); // Turns the box red!
+                .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
+                .setColor('#E74C3C'); // Turns the box red!
 
                 await interaction.editReply({ embeds: new Array(closedEmbed), components: new Array() });
+
+                // NEW: Send a separator row to Google Sheets to mark the event as finished!
+                await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, '--- EVENT CLOSED ---', '---', '---');
+
                 return interaction.followUp({ content: "✅ Event closed successfully! No one else can sign up.", ephemeral: true });
             }
         }
