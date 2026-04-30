@@ -10,9 +10,11 @@ if (!port) {
 }
 app.listen(port, () => console.log('Web server started'));
 
-// The intents array is now completely filled out with the required permissions
+// This trick dynamically grabs all available intents so the section is never empty
 const client = new Client({
-    intents:
+    intents: Object.keys(GatewayIntentBits).map((a) => {
+        return GatewayIntentBits[a] 
+    })
 });
 
 client.once('ready', () => {
