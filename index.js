@@ -34,7 +34,15 @@ client.on('interactionCreate', async (interaction) => {
     // 1. If someone types /raid
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'raid') {
-            
+
+            // Check if the command is in the correct channel
+            const allowedChannelId = '1499267462653280268';
+            if (interaction.channelId!== allowedChannelId) {
+                // Send a hidden warning if they are in the wrong channel
+                await interaction.reply({ content: '❌ You can only use this command in the designated raid channel!', ephemeral: true });
+                return; // This stops the bot from creating the event
+            }
+
             // Create the visual box
             const embed = new EmbedBuilder()
                .setTitle('🛡️ Dragon Lair Raid')
