@@ -178,8 +178,8 @@ async function processClick(interaction, isButton) {
 
                 const receivedEmbed = interaction.message.embeds.at(0);
                 const closedEmbed = EmbedBuilder.from(receivedEmbed)
-               .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
-               .setColor('#E74C3C');
+              .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
+              .setColor('#E74C3C');
 
                 await interaction.editReply({ embeds: new Array(closedEmbed), components: new Array() });
                 await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, '--- EVENT CLOSED ---', '---', '---');
@@ -243,22 +243,22 @@ async function processClick(interaction, isButton) {
 
         const formatList = (list) => list.length > 0? list.join('\n') : '-';
         
-        // --- ADD CUSTOM EMOJI STRINGS TO THE FIELDS HERE ---
+        // --- CUSTOM EMOJIS ADDED BELOW ---
         const newEmbed = new EmbedBuilder()
-        .setTitle(event.title)
-        .setColor('#F1C40F')
-        .setDescription(receivedEmbed.description)
-        .addFields(
-                { name: `<:EMOJI_NAME:1498698005539459122> Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
-                { name: `<:EMOJI_NAME:1498698148065841294> Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
-                { name: `<:EMOJI_NAME:1498698119913672736> Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
-                { name: `<:EMOJI_NAME:1498698562010353704> DancerBard (${event.players.DancerBard.length}/${event.limits.DancerBard})`, value: formatList(event.players.DancerBard), inline: true },
-                { name: `<:EMOJI_NAME:1498698315254988891> Bio (${event.players.Bio.length}/${event.limits.Bio})`, value: formatList(event.players.Bio), inline: true },
+       .setTitle(event.title)
+       .setColor('#F1C40F')
+       .setDescription(receivedEmbed.description)
+       .addFields(
+                { name: `<:Sniper:1498698005539459122> Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
+                { name: `<:Priest:1498698148065841294> Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
+                { name: `<:Paladin:1498698119913672736> Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
+                { name: `<:DancerBard:1498698562010353704> DancerBard (${event.players.DancerBard.length}/${event.limits.DancerBard})`, value: formatList(event.players.DancerBard), inline: true },
+                { name: `<:Bio:1498698315254988891> Bio (${event.players.Bio.length}/${event.limits.Bio})`, value: formatList(event.players.Bio), inline: true },
                 { name: '\u200b', value: '----------------------------------------', inline: false },
                 { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
                 { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
             )
-        .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
+       .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
 
         await interaction.editReply({ embeds: new Array(newEmbed) });
 
@@ -270,10 +270,17 @@ async function processClick(interaction, isButton) {
 
     } catch (error) {
         console.log("CLICK ERROR:", error);
-        // --- THIS PREVENTS THE CRASH WHEN AN ERROR OCCURS ---
-        if (interaction.deferred |
+        
+        // --- THIS FIXES THE CRASH WITHOUT USING THE BROKEN SYMBOL ---
+        let isAlreadyReplied = false;
+        if (interaction.deferred) {
+            isAlreadyReplied = true;
+        }
+        if (interaction.replied) {
+            isAlreadyReplied = true;
+        }
 
-| interaction.replied) {
+        if (isAlreadyReplied) {
             await interaction.followUp({ content: `❌ Error caught: ${error.message}`, ephemeral: true }).catch(console.error);
         } else {
             await interaction.reply({ content: `❌ Error caught: ${error.message}`, ephemeral: true }).catch(console.error);
@@ -348,39 +355,39 @@ function generateRaidEmbed(eventId) {
     const exactTime = `<t:${event.time}:t>`;
     const relativeTime = `<t:${event.time}:R>`;
 
-    // --- ADD CUSTOM EMOJI STRINGS TO THE FIELDS HERE ---
+    // --- CUSTOM EMOJIS ADDED BELOW ---
     return new EmbedBuilder()
-    .setTitle(event.title)
-    .setColor('#F1C40F')
-    .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
-    .addFields(
-            { name: `<:EMOJI_NAME:1234567890> Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
-            { name: `<:EMOJI_NAME:1234567890> Priest (0/${event.limits.Priest})`, value: '-', inline: true },
-            { name: `<:EMOJI_NAME:1234567890> Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
-            { name: `<:EMOJI_NAME:1234567890> DancerBard (0/${event.limits.DancerBard})`, value: '-', inline: true },
-            { name: `<:EMOJI_NAME:1234567890> Bio (0/${event.limits.Bio})`, value: '-', inline: true },
+   .setTitle(event.title)
+   .setColor('#F1C40F')
+   .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
+   .addFields(
+            { name: `<:Sniper:1498698005539459122> Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
+            { name: `<:Priest:1498698148065841294> Priest (0/${event.limits.Priest})`, value: '-', inline: true },
+            { name: `<:Paladin:1498698119913672736> Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
+            { name: `<:DancerBard:1498698562010353704> DancerBard (0/${event.limits.DancerBard})`, value: '-', inline: true },
+            { name: `<:Bio:1498698315254988891> Bio (0/${event.limits.Bio})`, value: '-', inline: true },
             { name: '\u200b', value: '----------------------------------------', inline: false },
             { name: `🪑 Bench (0)`, value: '-', inline: true },
             { name: `🅰️ Absent (0)`, value: '-', inline: true }
         )
-    .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
+   .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
 }
 
 function generateRaidComponents(eventId) {
-    // --- ADD ONLY THE NUMBERS OF THE EMOJIS TO THE BUTTONS HERE ---
+    // --- CUSTOM EMOJI IDs ADDED TO BUTTONS ---
     const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`role_Sniper_${eventId}`).setLabel('Sniper').setEmoji('1234567890').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`role_Priest_${eventId}`).setLabel('Priest').setEmoji('1234567890').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`role_Paladin_${eventId}`).setLabel('Paladin').setEmoji('1234567890').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`role_DancerBard_${eventId}`).setLabel('DancerBard').setEmoji('1234567890').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`role_Bio_${eventId}`).setLabel('Bio').setEmoji('1234567890').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`role_Sniper_${eventId}`).setLabel('Sniper').setEmoji('1498698005539459122').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_Priest_${eventId}`).setLabel('Priest').setEmoji('1498698148065841294').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_Paladin_${eventId}`).setLabel('Paladin').setEmoji('1498698119913672736').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_DancerBard_${eventId}`).setLabel('DancerBard').setEmoji('1498698562010353704').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_Bio_${eventId}`).setLabel('Bio').setEmoji('1498698315254988891').setStyle(ButtonStyle.Secondary)
     );
 
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-        .setCustomId(`status_${eventId}`)
-        .setPlaceholder('Select a status')
-        .addOptions(
+       .setCustomId(`status_${eventId}`)
+       .setPlaceholder('Select a status')
+       .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
