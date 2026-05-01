@@ -230,7 +230,7 @@ async function processClick(interaction, isButton) {
             }
         };
 
-        const userName = interaction.user.username;
+        const userName = interaction.member.displayName;
 
         for (const key in event.players) {
             event.players[key] = event.players[key].filter(name => name!== userName);
