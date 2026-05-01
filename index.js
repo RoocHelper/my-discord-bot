@@ -64,38 +64,33 @@ client.on('interactionCreate', async (interaction) => {
             }
             const unixTime = Math.floor(parsedDate.getTime() / 1000);
 
-            // Fetch highest ID from Sheets
             try {
                 const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
                 const key = process.env.GOOGLE_PRIVATE_KEY;
                 const sheetId = process.env.GOOGLE_SHEET_ID;
 
-                if (email) {
-                    if (key) {
-                        if (sheetId) {
-                            const serviceAccountAuth = new JWT({
-                                email: email,
-                                key: key.replace(/\\n/g, '\n'),
-                                scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
-                            });
-                            const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
-                            await doc.loadInfo();
-                            const sheet = doc.sheetsByIndex.at(0);
-                            const rows = await sheet.getRows();
+                if (email && key && sheetId) {
+                    const serviceAccountAuth = new JWT({
+                        email: email,
+                        key: key.replace(/\\n/g, '\n'),
+                        scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
+                    });
+                    const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
+                    await doc.loadInfo();
+                    const sheet = doc.sheetsByIndex.at(0);
+                    const rows = await sheet.getRows();
 
-                            let lastId = 0;
-                            if (rows.length > 0) {
-                                for (let i = 0; i < rows.length; i++) {
-                                    let rowId = parseInt(String(rows.at(i).get('EventID')).replace("'", ""));
-                                    if (rowId > lastId) {
-                                        lastId = rowId;
-                                    }
-                                }
+                    let lastId = 0;
+                    if (rows.length > 0) {
+                        for (let i = 0; i < rows.length; i++) {
+                            let rowId = parseInt(String(rows.at(i).get('EventID')).replace("'", ""));
+                            if (rowId > lastId) {
+                                lastId = rowId;
                             }
-                            let nextIdNum = lastId + 1;
-                            eventId = nextIdNum.toString();
                         }
                     }
+                    let nextIdNum = lastId + 1;
+                    eventId = nextIdNum.toString();
                 }
             } catch (error) {
                 console.log("Could not fetch ID, defaulting to timestamp.", error);
@@ -174,7 +169,6 @@ async function processClick(interaction, isButton) {
             eventId = parts.at(2);
         }
 
-// --- CLOSE EVENT LOGIC ---
         if (action === 'admin') {
             if (choice === 'close') {
                 let hasPerms = interaction.member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -184,12 +178,10 @@ async function processClick(interaction, isButton) {
 
                 const receivedEmbed = interaction.message.embeds.at(0);
                 const closedEmbed = EmbedBuilder.from(receivedEmbed)
-                .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
-                .setColor('#E74C3C'); // Turns the box red!
+               .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
+               .setColor('#E74C3C');
 
                 await interaction.editReply({ embeds: new Array(closedEmbed), components: new Array() });
-
-                // NEW: Send a separator row to Google Sheets to mark the event as finished!
                 await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, '--- EVENT CLOSED ---', '---', '---');
 
                 return interaction.followUp({ content: "✅ Event closed successfully! No one else can sign up.", ephemeral: true });
@@ -198,14 +190,12 @@ async function processClick(interaction, isButton) {
 
         const receivedEmbed = interaction.message.embeds.at(0);
 
-        // Handle "Late" and "RemoveLate" (These do NOT update the Discord embed lists, only the spreadsheet)
         const lateStatuses = new Array('Late', 'RemoveLate');
         if (lateStatuses.includes(choice)) {
-            await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, interaction.user.username, null, choice); 
+            await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, interaction.member.displayName, null, choice); 
             return interaction.followUp({ content: "⏱️ Your status has been noted in the spreadsheet!", ephemeral: true });
         }
 
-        // If it's a Role, Bench, or Absent, update the Discord embed lists
         const fields = receivedEmbed.fields;
 
         const parseField = (index) => {
@@ -253,25 +243,25 @@ async function processClick(interaction, isButton) {
 
         const formatList = (list) => list.length > 0? list.join('\n') : '-';
         
+        // --- ADD CUSTOM EMOJI STRINGS TO THE FIELDS HERE ---
         const newEmbed = new EmbedBuilder()
-         .setTitle(event.title)
-         .setColor('#F1C40F')
-         .setDescription(receivedEmbed.description)
-         .addFields(
-                { name: `🎯 Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
-                { name: `⛑️ Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
-                { name: `🛡️ Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
-                { name: `🎸 DancerBard (${event.players.DancerBard.length}/${event.limits.DancerBard})`, value: formatList(event.players.DancerBard), inline: true },
-                { name: `🧪 Bio (${event.players.Bio.length}/${event.limits.Bio})`, value: formatList(event.players.Bio), inline: true },
+        .setTitle(event.title)
+        .setColor('#F1C40F')
+        .setDescription(receivedEmbed.description)
+        .addFields(
+                { name: `<:EMOJI_NAME:1498698005539459122> Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
+                { name: `<:EMOJI_NAME:1498698148065841294> Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
+                { name: `<:EMOJI_NAME:1498698119913672736> Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
+                { name: `<:EMOJI_NAME:1498698562010353704> DancerBard (${event.players.DancerBard.length}/${event.limits.DancerBard})`, value: formatList(event.players.DancerBard), inline: true },
+                { name: `<:EMOJI_NAME:1498698315254988891> Bio (${event.players.Bio.length}/${event.limits.Bio})`, value: formatList(event.players.Bio), inline: true },
                 { name: '\u200b', value: '----------------------------------------', inline: false },
                 { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
                 { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
             )
-         .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
+        .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
 
         await interaction.editReply({ embeds: new Array(newEmbed) });
 
-        // Update Google Sheets properly based on if they clicked a Role or a Status
         if (action === 'status') {
             await backupToGoogleSheets(`'${eventId}`, event.title, userName, null, choice); 
         } else {
@@ -280,19 +270,23 @@ async function processClick(interaction, isButton) {
 
     } catch (error) {
         console.log("CLICK ERROR:", error);
-        await interaction.followUp({ content: `❌ Error caught: ${error.message}`, ephemeral: true });
+        // --- THIS PREVENTS THE CRASH WHEN AN ERROR OCCURS ---
+        if (interaction.deferred |
+
+| interaction.replied) {
+            await interaction.followUp({ content: `❌ Error caught: ${error.message}`, ephemeral: true }).catch(console.error);
+        } else {
+            await interaction.reply({ content: `❌ Error caught: ${error.message}`, ephemeral: true }).catch(console.error);
+        }
     }
 }
 
-// --- GOOGLE SHEETS BACKUP ENGINE ---
 async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
     const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
     const key = process.env.GOOGLE_PRIVATE_KEY;
     const sheetId = process.env.GOOGLE_SHEET_ID;
 
-    if (!email) return;
-    if (!key) return;
-    if (!sheetId) return;
+    if (!email ||!key ||!sheetId) return;
 
     try {
         const serviceAccountAuth = new JWT({
@@ -309,38 +303,27 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
         const safeEventId = String(eventId).replace("'", "");
         const existingRow = rows.find(r => String(r.get('EventID')).replace("'", "") === safeEventId && r.get('User') === username);
 
-        // If the user already exists on the sheet for this event, UPDATE them
         if (existingRow) {
-            // Only overwrite the Role if a new role was clicked
             if (role) {
                 existingRow.set('Role', role);
             }
-            
-            // Only overwrite the Note if a new status was selected
             if (note) {
                 if (note === 'RemoveLate') {
-                    existingRow.set('Note', ''); // Clears the note
+                    existingRow.set('Note', ''); 
                 } else {
-                    existingRow.set('Note', note); // Saves "Late", "Bench", or "Absent"
+                    existingRow.set('Note', note); 
                 }
             }
-            
             existingRow.set('Title', eventTitle);
             existingRow.set('Time', new Date().toLocaleString());
             await existingRow.save(); 
         } else {
-            // If the user is new to the event, ADD a new row
             let initialNote = '';
-            if (note) {
-                if (note!== 'RemoveLate') {
-                    initialNote = note;
-                }
+            if (note && note!== 'RemoveLate') {
+                initialNote = note;
             }
             
-            let initialRole = '';
-            if (role) {
-                initialRole = role;
-            }
+            let initialRole = role? role : '';
 
             await sheet.addRow({ 
                 EventID: eventId, 
@@ -365,37 +348,39 @@ function generateRaidEmbed(eventId) {
     const exactTime = `<t:${event.time}:t>`;
     const relativeTime = `<t:${event.time}:R>`;
 
+    // --- ADD CUSTOM EMOJI STRINGS TO THE FIELDS HERE ---
     return new EmbedBuilder()
-     .setTitle(event.title)
-     .setColor('#F1C40F')
-     .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
-     .addFields(
-            { name: `🎯 Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
-            { name: `⛑️ Priest (0/${event.limits.Priest})`, value: '-', inline: true },
-            { name: `🛡️ Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
-            { name: `🎸 DancerBard (0/${event.limits.DancerBard})`, value: '-', inline: true },
-            { name: `🧪 Bio (0/${event.limits.Bio})`, value: '-', inline: true },
+    .setTitle(event.title)
+    .setColor('#F1C40F')
+    .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
+    .addFields(
+            { name: `<:EMOJI_NAME:1234567890> Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
+            { name: `<:EMOJI_NAME:1234567890> Priest (0/${event.limits.Priest})`, value: '-', inline: true },
+            { name: `<:EMOJI_NAME:1234567890> Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
+            { name: `<:EMOJI_NAME:1234567890> DancerBard (0/${event.limits.DancerBard})`, value: '-', inline: true },
+            { name: `<:EMOJI_NAME:1234567890> Bio (0/${event.limits.Bio})`, value: '-', inline: true },
             { name: '\u200b', value: '----------------------------------------', inline: false },
             { name: `🪑 Bench (0)`, value: '-', inline: true },
             { name: `🅰️ Absent (0)`, value: '-', inline: true }
         )
-     .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
+    .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
 }
 
 function generateRaidComponents(eventId) {
+    // --- ADD ONLY THE NUMBERS OF THE EMOJIS TO THE BUTTONS HERE ---
     const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`role_Sniper_${eventId}`).setLabel('Sniper').setEmoji('🎯').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`role_Priest_${eventId}`).setLabel('Priest').setEmoji('⛑️').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`role_Paladin_${eventId}`).setLabel('Paladin').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`role_DancerBard_${eventId}`).setLabel('DancerBard').setEmoji('🎸').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`role_Bio_${eventId}`).setLabel('Bio').setEmoji('🧪').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`role_Sniper_${eventId}`).setLabel('Sniper').setEmoji('1234567890').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_Priest_${eventId}`).setLabel('Priest').setEmoji('1234567890').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_Paladin_${eventId}`).setLabel('Paladin').setEmoji('1234567890').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_DancerBard_${eventId}`).setLabel('DancerBard').setEmoji('1234567890').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_Bio_${eventId}`).setLabel('Bio').setEmoji('1234567890').setStyle(ButtonStyle.Secondary)
     );
 
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-         .setCustomId(`status_${eventId}`)
-         .setPlaceholder('Select a status')
-         .addOptions(
+        .setCustomId(`status_${eventId}`)
+        .setPlaceholder('Select a status')
+        .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
@@ -403,7 +388,6 @@ function generateRaidComponents(eventId) {
            )
     );
 
-    // NEW ROW: The Admin Close Button!
     const adminControls = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`admin_close_${eventId}`).setLabel('Close Event').setEmoji('🔒').setStyle(ButtonStyle.Danger)
     );
