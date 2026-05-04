@@ -24,8 +24,30 @@ const client = new Client({
 const raidData = {};
 
 // --- KONFIGURASI 11 PROFESI ---
-// Kamu bisa mengganti emoji standar dengan ID emoji servermu seperti yang kamu lakukan sebelumnya!
-const JOBS =;
+// Emoji untuk BardDancer, Sniper, Bio, HighPriest, dan Paladin sudah menggunakan ID asli dari servermu!
+// Untuk job lain (LK, Assassin, dll), silakan ganti '1234567890' dengan ID emoji servermu nanti.
+const JOBS = new Array(
+    { id: 'LK', label: 'LK', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
+    { id: 'BardDancer', label: 'Bard/Dancer', customId: '1498698562010353704', emoji: '<:DancerBard:1498698562010353704>' },
+    { id: 'Sniper', label: 'Sniper', customId: '1498698005539459122', emoji: '<:Sniper:1498698005539459122>' },
+    { id: 'BioChemist', label: 'Bio Chemist', customId: '1498698315254988891', emoji: '<:Bio:1498698315254988891>' },
+    { id: 'Mastersmith', label: 'Mastersmith', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
+    { id: 'Assassin', label: 'Assassin', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
+    { id: 'Professor', label: 'Professor', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
+    { id: 'HighWizard', label: 'High Wizard', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
+    { id: 'Champion', label: 'Champion', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
+    { id: 'HighPriest', label: 'High Priest', customId: '1498698148065841294', emoji: '<:Priest:1498698148065841294>' },
+    { id: 'Paladin', label: 'Paladin', customId: '1498698119913672736', emoji: '<:Paladin:1498698119913672736>' }
+);
+
+// FUNGSI AMAN: Otomatis mengubah popout yang dikosongkan menjadi 0
+function safeGetInteger(interaction, name) {
+    let value = interaction.options.getInteger(name);
+    if (value === null) {
+        return 0;
+    }
+    return value;
+}
 
 client.once('ready', async () => {
     console.log(`Success! Logged in as ${client.user.tag}`);
@@ -45,21 +67,21 @@ client.once('ready', async () => {
         },
         {
             name: 'absen',
-            description: 'Buat form absensi dinamis (Isi kuota max per class, kosongkan jika tidak dipakai)',
+            description: 'Buat form absensi (Isi kuota max per class, kosongkan jika tidak dipakai)',
             options: new Array(
                 { name: 'title', description: 'Judul absen?', type: 3, required: true },
                 { name: 'date', description: 'Kapan? (e.g., tomorrow at 9pm)', type: 3, required: true },
-                { name: 'lk', description: 'Max Lord Knight (Default 0)', type: 4, required: false },
-                { name: 'bard_dancer', description: 'Max Bard/Dancer (Default 0)', type: 4, required: false },
-                { name: 'sniper', description: 'Max Sniper (Default 0)', type: 4, required: false },
-                { name: 'bio_chemist', description: 'Max Bio Chemist (Default 0)', type: 4, required: false },
-                { name: 'mastersmith', description: 'Max Mastersmith (Default 0)', type: 4, required: false },
-                { name: 'assassin', description: 'Max Assassin (Default 0)', type: 4, required: false },
-                { name: 'professor', description: 'Max Professor (Default 0)', type: 4, required: false },
-                { name: 'high_wizard', description: 'Max High Wizard (Default 0)', type: 4, required: false },
-                { name: 'champion', description: 'Max Champion (Default 0)', type: 4, required: false },
-                { name: 'high_priest', description: 'Max High Priest (Default 0)', type: 4, required: false },
-                { name: 'paladin', description: 'Max Paladin (Default 0)', type: 4, required: false }
+                { name: 'lk', description: 'Max Lord Knight (Otomatis 0)', type: 4, required: false },
+                { name: 'bard_dancer', description: 'Max Bard/Dancer (Otomatis 0)', type: 4, required: false },
+                { name: 'sniper', description: 'Max Sniper (Otomatis 0)', type: 4, required: false },
+                { name: 'bio_chemist', description: 'Max Bio Chemist (Otomatis 0)', type: 4, required: false },
+                { name: 'mastersmith', description: 'Max Mastersmith (Otomatis 0)', type: 4, required: false },
+                { name: 'assassin', description: 'Max Assassin (Otomatis 0)', type: 4, required: false },
+                { name: 'professor', description: 'Max Professor (Otomatis 0)', type: 4, required: false },
+                { name: 'high_wizard', description: 'Max High Wizard (Otomatis 0)', type: 4, required: false },
+                { name: 'champion', description: 'Max Champion (Otomatis 0)', type: 4, required: false },
+                { name: 'high_priest', description: 'Max High Priest (Otomatis 0)', type: 4, required: false },
+                { name: 'paladin', description: 'Max Paladin (Otomatis 0)', type: 4, required: false }
             )
         }
     ));
@@ -81,7 +103,18 @@ client.on('interactionCreate', async (interaction) => {
                 const key = process.env.GOOGLE_PRIVATE_KEY;
                 const sheetId = process.env.GOOGLE_SHEET_ID;
 
-                if (!email ||!key ||!sheetId) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
+                let isConfigured = false;
+                if (email) {
+                    if (key) {
+                        if (sheetId) {
+                            isConfigured = true;
+                        }
+                    }
+                }
+
+                if (!isConfigured) {
+                    return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
+                }
 
                 const serviceAccountAuth = new JWT({
                     email: email,
@@ -96,7 +129,10 @@ client.on('interactionCreate', async (interaction) => {
 
                 const results = rows.filter(row => {
                     const player = row.get('Player yang Bid');
-                    return player && player.toLowerCase() === userName;
+                    if (player) {
+                        return player.toLowerCase() === userName;
+                    }
+                    return false;
                 });
 
                 if (results.length === 0) {
@@ -105,17 +141,20 @@ client.on('interactionCreate', async (interaction) => {
 
                 let descriptionText = `Halo **${interaction.member.displayName}**, ini adalah daftar bid yang kamu menangkan:\n\n`;
                 results.forEach(res => {
-                    const item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : 'Item';
-                    const page = res.get('Halaman')? res.get('Halaman') : '-';
-                    const slot = res.get('Slot')? res.get('Slot') : '-';
+                    let item = 'Item';
+                    if (res.get('Nama Item (Otomatis)')) item = res.get('Nama Item (Otomatis)');
+                    let page = '-';
+                    if (res.get('Halaman')) page = res.get('Halaman');
+                    let slot = '-';
+                    if (res.get('Slot')) slot = res.get('Slot');
                     descriptionText += `📦 **${item}** (Halaman: ${page}, Slot: ${slot})\n`;
                 });
 
                 const resultEmbed = new EmbedBuilder()
-                  .setTitle('📋 Informasi Bid Listing')
-                  .setColor('#2ECC71')
-                  .setDescription(descriptionText)
-                  .setFooter({ text: `Total item dimenangkan: ${results.length}` });
+                .setTitle('📋 Informasi Bid Listing')
+                .setColor('#2ECC71')
+                .setDescription(descriptionText)
+                .setFooter({ text: `Total item dimenangkan: ${results.length}` });
 
                 return interaction.editReply({ embeds: new Array(resultEmbed) });
             } catch (error) {
@@ -124,7 +163,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         // ==========================================
-        // COMMAND: /ABSEN (Dinamis Limit 11 Job)
+        // COMMAND: /ABSEN (Dinamis 11 Job)
         // ==========================================
         if (interaction.commandName === 'absen') {
             await interaction.deferReply(); 
@@ -144,7 +183,16 @@ client.on('interactionCreate', async (interaction) => {
                 const key = process.env.GOOGLE_PRIVATE_KEY;
                 const sheetId = process.env.GOOGLE_SHEET_ID;
 
-                if (email && key && sheetId) {
+                let isConfigured = false;
+                if (email) {
+                    if (key) {
+                        if (sheetId) {
+                            isConfigured = true;
+                        }
+                    }
+                }
+
+                if (isConfigured) {
                     const serviceAccountAuth = new JWT({
                         email: email,
                         key: key.replace(/\\n/g, '\n'),
@@ -171,41 +219,19 @@ client.on('interactionCreate', async (interaction) => {
                 eventId = Date.now().toString(); 
             }
 
-            // Ambil limit yang diinput user, jika dikosongi otomatis jadi 0
+            // Ambil limit yang diinput user, otomatis jadi 0 jika kosong
             const limits = {
-                LK: interaction.options.getInteger('lk') |
-
-| 0,
-                BardDancer: interaction.options.getInteger('bard_dancer') |
-
-| 0,
-                Sniper: interaction.options.getInteger('sniper') |
-
-| 0,
-                BioChemist: interaction.options.getInteger('bio_chemist') |
-
-| 0,
-                Mastersmith: interaction.options.getInteger('mastersmith') |
-
-| 0,
-                Assassin: interaction.options.getInteger('assassin') |
-
-| 0,
-                Professor: interaction.options.getInteger('professor') |
-
-| 0,
-                HighWizard: interaction.options.getInteger('high_wizard') |
-
-| 0,
-                Champion: interaction.options.getInteger('champion') |
-
-| 0,
-                HighPriest: interaction.options.getInteger('high_priest') |
-
-| 0,
-                Paladin: interaction.options.getInteger('paladin') |
-
-| 0
+                LK: safeGetInteger(interaction, 'lk'),
+                BardDancer: safeGetInteger(interaction, 'bard_dancer'),
+                Sniper: safeGetInteger(interaction, 'sniper'),
+                BioChemist: safeGetInteger(interaction, 'bio_chemist'),
+                Mastersmith: safeGetInteger(interaction, 'mastersmith'),
+                Assassin: safeGetInteger(interaction, 'assassin'),
+                Professor: safeGetInteger(interaction, 'professor'),
+                HighWizard: safeGetInteger(interaction, 'high_wizard'),
+                Champion: safeGetInteger(interaction, 'champion'),
+                HighPriest: safeGetInteger(interaction, 'high_priest'),
+                Paladin: safeGetInteger(interaction, 'paladin')
             };
 
             const event = {
@@ -230,7 +256,6 @@ client.on('interactionCreate', async (interaction) => {
 
             const reply = await interaction.editReply({ embeds: new Array(embed), components: components });
             
-            // Save to temporary memory for /editraid command
             raidData[eventId] = { messageId: reply.id, channelId: reply.channelId, time: unixTime };
         }
 
@@ -252,7 +277,6 @@ client.on('interactionCreate', async (interaction) => {
             const channel = await client.channels.fetch(eventMem.channelId);
             const message = await channel.messages.fetch(eventMem.messageId);
             
-            // Rebuild description with new time
             const receivedEmbed = message.embeds.at(0);
             const timeDisplay = `<t:${eventMem.time}:d>`;
             const exactTime = `<t:${eventMem.time}:t>`;
@@ -260,7 +284,6 @@ client.on('interactionCreate', async (interaction) => {
             const newDescription = `**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`;
             const timeLine = `Event start time • ${relativeTime}`;
             
-            // Construct fake event object to feed the generator
             const event = extractEventFromEmbed(receivedEmbed);
             
             const updatedEmbed = generateDynamicEmbed(eventId, event, newDescription, timeLine);
@@ -280,7 +303,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // ==========================================
-// MAGIC CLICK HANDLER (Fully Stateless)
+// MAGIC CLICK HANDLER
 // ==========================================
 async function processClick(interaction, isButton) {
     try {
@@ -307,8 +330,8 @@ async function processClick(interaction, isButton) {
                 }
                 const receivedEmbed = interaction.message.embeds.at(0);
                 const closedEmbed = EmbedBuilder.from(receivedEmbed)
-                   .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
-                   .setColor('#E74C3C');
+                  .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
+                  .setColor('#E74C3C');
 
                 await interaction.editReply({ embeds: new Array(closedEmbed), components: new Array() });
                 await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, '--- EVENT CLOSED ---', '---', '---');
@@ -324,16 +347,13 @@ async function processClick(interaction, isButton) {
             return interaction.followUp({ content: "⏱️ Your status has been noted in the spreadsheet!", ephemeral: true });
         }
 
-        // Mengekstrak informasi dari Kotak Embed yang sedang aktif
         const event = extractEventFromEmbed(receivedEmbed);
         const userName = interaction.member.displayName;
 
-        // Cegah double sign-up
         for (const key in event.players) {
             event.players[key] = event.players[key].filter(name => name!== userName);
         }
 
-        // Cek Kuota
         if (event.limits[choice]) {
             if (event.players[choice].length >= event.limits[choice]) {
                 return interaction.followUp({ content: `❌ Kuota untuk **${choice}** sudah penuh!`, ephemeral: true });
@@ -345,9 +365,8 @@ async function processClick(interaction, isButton) {
         const oldFooter = receivedEmbed.footer.text;
         const timeLine = oldFooter.split('\n').at(2); 
 
-        // Tulis ulang embed dan tombolnya
         const newEmbed = generateDynamicEmbed(eventId, event, receivedEmbed.description, timeLine);
-        const newComponents = generateDynamicComponents(eventId, event); // Penting agar tombol tetap ada!
+        const newComponents = generateDynamicComponents(eventId, event); 
 
         await interaction.editReply({ embeds: new Array(newEmbed), components: newComponents });
 
@@ -360,8 +379,12 @@ async function processClick(interaction, isButton) {
     } catch (error) {
         console.log("CLICK ERROR:", error);
         let isAlreadyReplied = false;
-        if (interaction.deferred) isAlreadyReplied = true;
-        if (interaction.replied) isAlreadyReplied = true;
+        if (interaction.deferred) {
+            isAlreadyReplied = true;
+        }
+        if (interaction.replied) {
+            isAlreadyReplied = true;
+        }
 
         if (isAlreadyReplied) {
             await interaction.followUp({ content: `❌ Error caught: ${error.message}`, ephemeral: true }).catch(console.error);
@@ -372,17 +395,23 @@ async function processClick(interaction, isButton) {
 }
 
 // ==========================================
-// FUNGSI PENDUKUNG (Membuat Embed dan Tombol secara Dinamis)
+// FUNGSI PENDUKUNG EMBED DAN KOMPONEN
 // ==========================================
-
 function extractEventFromEmbed(receivedEmbed) {
     const fields = receivedEmbed.fields;
 
     const getFieldData = (label) => {
         const field = fields.find(f => f.name.includes(label));
-        if (!field |
+        let isMissing = false;
+        if (!field) {
+            isMissing = true;
+        } else if (field.value === '-') {
+            isMissing = true;
+        }
 
-| field.value === '-') return new Array();
+        if (isMissing) {
+            return new Array();
+        }
         return field.value.split('\n');
     };
 
@@ -390,7 +419,10 @@ function extractEventFromEmbed(receivedEmbed) {
         const field = fields.find(f => f.name.includes(label));
         if (!field) return 0;
         const match = field.name.match(/\d+\/(\d+)\)/);
-        return match? parseInt(match[1]) : 0;
+        if (match) {
+            return parseInt(match[1]);
+        }
+        return 0;
     };
 
     return {
@@ -431,9 +463,9 @@ function generateDynamicEmbed(eventId, event, description, timeLine) {
     let roleTotal = 0;
 
     const newEmbed = new EmbedBuilder()
-       .setTitle(event.title)
-       .setColor('#F1C40F')
-       .setDescription(description);
+      .setTitle(event.title)
+      .setColor('#F1C40F')
+      .setDescription(description);
 
     JOBS.forEach(job => {
         if (event.limits[job.id] > 0) {
@@ -465,24 +497,24 @@ function generateDynamicComponents(eventId, event) {
         if (event.limits[job.id] > 0) {
             buttonBuffer.push(
                 new ButtonBuilder()
-                   .setCustomId(`role_${job.id}_${eventId}`)
-                   .setLabel(job.label)
-                   .setEmoji(job.customId)
-                   .setStyle(ButtonStyle.Secondary)
+                  .setCustomId(`role_${job.id}_${eventId}`)
+                  .setLabel(job.label)
+                  .setEmoji(job.customId)
+                  .setStyle(ButtonStyle.Secondary)
             );
         }
     });
 
-    // Discord membatasi maks 5 tombol per baris
     for (let i = 0; i < buttonBuffer.length; i += 5) {
-        allRows.push(new ActionRowBuilder().addComponents(buttonBuffer.slice(i, i + 5)));
+        let chunk = buttonBuffer.slice(i, i + 5);
+        allRows.push(new ActionRowBuilder().addComponents(chunk));
     }
 
     allRows.push(new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-           .setCustomId(`status_${eventId}`)
-           .setPlaceholder('Select a status')
-           .addOptions(
+          .setCustomId(`status_${eventId}`)
+          .setPlaceholder('Select a status')
+          .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
@@ -497,61 +529,20 @@ function generateDynamicComponents(eventId, event) {
     return allRows;
 }
 
-// --- GOOGLE SHEETS BACKUP ENGINE ---
 async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
     const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
     const key = process.env.GOOGLE_PRIVATE_KEY;
     const sheetId = process.env.GOOGLE_SHEET_ID;
 
-    if (!email ||!key ||!sheetId) return;
+    let isConfigured = false;
+    if (email) {
+        if (key) {
+            if (sheetId) {
+                isConfigured = true;
+            }
+        }
+    }
+    
+    if (!isConfigured) return;
 
     try {
-        const serviceAccountAuth = new JWT({
-            email: email,
-            key: key.replace(/\\n/g, '\n'),
-            scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
-        });
-        
-        const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
-        await doc.loadInfo();
-        const sheet = doc.sheetsByIndex.at(0); 
-        
-        const rows = await sheet.getRows();
-        const safeEventId = String(eventId).replace("'", "");
-        const existingRow = rows.find(r => String(r.get('EventID')).replace("'", "") === safeEventId && r.get('User') === username);
-
-        if (existingRow) {
-            if (role) existingRow.set('Role', role);
-            if (note) {
-                if (note === 'RemoveLate') {
-                    existingRow.set('Note', ''); 
-                } else {
-                    existingRow.set('Note', note); 
-                }
-            }
-            existingRow.set('Title', eventTitle);
-            existingRow.set('Time', new Date().toLocaleString());
-            await existingRow.save(); 
-        } else {
-            let initialNote = '';
-            if (note && note!== 'RemoveLate') initialNote = note;
-            let initialRole = role? role : '';
-
-            await sheet.addRow({ 
-                EventID: eventId, 
-                Title: eventTitle, 
-                User: username, 
-                Role: initialRole, 
-                Note: initialNote,
-                Time: new Date().toLocaleString() 
-            });
-        }
-    } catch (error) {
-        console.log("Google Sheets Error:", error);
-    }
-}
-
-client.login(process.env.DISCORD_TOKEN).catch(error => {
-    console.log("LOGIN ERROR: Could not connect to Discord.");
-    console.error(error);
-});
