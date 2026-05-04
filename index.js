@@ -42,6 +42,11 @@ client.once('ready', async () => {
                 { name: 'event_id', description: 'The ID at the bottom of the raid box', type: 3, required: true },
                 { name: 'new_date', description: 'The new time (e.g., in 2 hours)', type: 3, required: true }
             )
+        },
+        {
+            // COMMAND BARU: Cek Bid
+            name: 'cekbid',
+            description: 'Cek daftar kemenangan bid feather & fragment kamu!'
         }
     ));
     console.log('Commands created!');
@@ -51,6 +56,82 @@ client.on('interactionCreate', async (interaction) => {
     
     if (interaction.isChatInputCommand()) {
         
+        // ==========================================
+        // COMMAND: /CEKBID
+        // ==========================================
+        if (interaction.commandName === 'cekbid') {
+            // Memberikan status "Thinking..." yang disembunyikan hanya untuk user yang mengecek
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+                const key = process.env.GOOGLE_PRIVATE_KEY;
+                const sheetId = process.env.GOOGLE_SHEET_ID;
+
+                if (!email ||!key ||!sheetId) {
+                    return interaction.editReply({ content: '❌ Konfigurasi Google Sheets belum lengkap.' });
+                }
+
+                // Autentikasi Google Sheets
+                const serviceAccountAuth = new JWT({
+                    email: email,
+                    key: key.replace(/\\n/g, '\n'),
+                    scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
+                });
+                const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
+                await doc.loadInfo();
+
+                // PENTING: Mengambil Sheet kedua (index 1) untuk data Bid
+                const sheet = doc.sheetsByIndex.at(1);
+                if (!sheet) {
+                    return interaction.editReply({ content: '❌ Tab Sheet ke-2 tidak ditemukan! Harap buat Tab baru di Excel kamu untuk data Bid.' });
+                }
+
+                // Ambil semua baris di Sheet ke-2
+                const rows = await sheet.getRows();
+                
+                // Ambil nama user di server Discord dan jadikan huruf kecil semua
+                const userName = interaction.member.displayName.toLowerCase();
+
+                // Cari semua baris yang nama "Player yang Bid"-nya sama dengan nama Discord
+                const results = rows.filter(row => {
+                    const player = row.get('Player yang Bid');
+                    return player && player.toLowerCase() === userName;
+                });
+
+                // JIKA NAMA TIDAK DITEMUKAN
+                if (results.length === 0) {
+                    return interaction.editReply({ content: `❌ Halo **${interaction.member.displayName}**, nama kamu **tidak ada** di bid listing saat ini.` });
+                }
+
+                // JIKA NAMA DITEMUKAN
+                let descriptionText = `Halo **${interaction.member.displayName}**, ini adalah daftar bid yang kamu menangkan:\n\n`;
+
+                results.forEach(res => {
+                    const item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : 'Item';
+                    const page = res.get('Halaman')? res.get('Halaman') : '-';
+                    const slot = res.get('Slot')? res.get('Slot') : '-';
+                    descriptionText += `📦 **${item}** (Halaman: ${page}, Slot: ${slot})\n`;
+                });
+
+                const resultEmbed = new EmbedBuilder()
+                   .setTitle('📋 Informasi Bid Listing')
+                   .setColor('#2ECC71')
+                   .setDescription(descriptionText)
+                   .setFooter({ text: `Total item dimenangkan: ${results.length}` });
+
+                // Kirim hasil pencariannya!
+                return interaction.editReply({ embeds: new Array(resultEmbed) });
+
+            } catch (error) {
+                console.log("CEKBID ERROR:", error);
+                return interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
+            }
+        }
+
+        // ==========================================
+        // COMMAND: /RAID
+        // ==========================================
         if (interaction.commandName === 'raid') {
             await interaction.deferReply(); 
 
@@ -117,6 +198,9 @@ client.on('interactionCreate', async (interaction) => {
             raidData[eventId].channelId = reply.channelId;
         }
 
+        // ==========================================
+        // COMMAND: /EDITRAID
+        // ==========================================
         if (interaction.commandName === 'editraid') {
             const eventId = interaction.options.getString('event_id');
             const newDateString = interaction.options.getString('new_date');
@@ -243,22 +327,21 @@ async function processClick(interaction, isButton) {
 
         const formatList = (list) => list.length > 0? list.join('\n') : '-';
         
-        // --- CUSTOM EMOJIS ADDED BELOW ---
         const newEmbed = new EmbedBuilder()
-       .setTitle(event.title)
-       .setColor('#F1C40F')
-       .setDescription(receivedEmbed.description)
-       .addFields(
-                { name: `<:Sniper:1498698005539459122> Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
-                { name: `<:Priest:1498698148065841294> Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
-                { name: `<:Paladin:1498698119913672736> Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
-                { name: `<:DancerBard:1498698562010353704> DancerBard (${event.players.DancerBard.length}/${event.limits.DancerBard})`, value: formatList(event.players.DancerBard), inline: true },
-                { name: `<:Bio:1498698315254988891> Bio (${event.players.Bio.length}/${event.limits.Bio})`, value: formatList(event.players.Bio), inline: true },
+      .setTitle(event.title)
+      .setColor('#F1C40F')
+      .setDescription(receivedEmbed.description)
+      .addFields(
+                { name: `<:1498698005539459122:1498698005539459122> Sniper (${event.players.Sniper.length}/${event.limits.Sniper})`, value: formatList(event.players.Sniper), inline: true },
+                { name: `<:1498698148065841294:1498698148065841294> Priest (${event.players.Priest.length}/${event.limits.Priest})`, value: formatList(event.players.Priest), inline: true },
+                { name: `<:1498698119913672736:1498698119913672736> Paladin (${event.players.Paladin.length}/${event.limits.Paladin})`, value: formatList(event.players.Paladin), inline: true },
+                { name: `<:1498698562010353704:1498698562010353704> DancerBard (${event.players.DancerBard.length}/${event.limits.DancerBard})`, value: formatList(event.players.DancerBard), inline: true },
+                { name: `<:1498698315254988891:1498698315254988891> Bio (${event.players.Bio.length}/${event.limits.Bio})`, value: formatList(event.players.Bio), inline: true },
                 { name: '\u200b', value: '----------------------------------------', inline: false },
                 { name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true },
                 { name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true }
             )
-       .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
+      .setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
 
         await interaction.editReply({ embeds: new Array(newEmbed) });
 
@@ -271,7 +354,6 @@ async function processClick(interaction, isButton) {
     } catch (error) {
         console.log("CLICK ERROR:", error);
         
-        // --- THIS FIXES THE CRASH WITHOUT USING THE BROKEN SYMBOL ---
         let isAlreadyReplied = false;
         if (interaction.deferred) {
             isAlreadyReplied = true;
@@ -304,6 +386,8 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
         
         const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
         await doc.loadInfo();
+        
+        // PENTING: Gunakan Sheet index 0 (Tab 1) untuk menyimpan data Raid
         const sheet = doc.sheetsByIndex.at(0); 
         
         const rows = await sheet.getRows();
@@ -355,26 +439,24 @@ function generateRaidEmbed(eventId) {
     const exactTime = `<t:${event.time}:t>`;
     const relativeTime = `<t:${event.time}:R>`;
 
-    // --- CUSTOM EMOJIS ADDED BELOW ---
     return new EmbedBuilder()
-   .setTitle(event.title)
-   .setColor('#F1C40F')
-   .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
-   .addFields(
-            { name: `<:Sniper:1498698005539459122> Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
-            { name: `<:Priest:1498698148065841294> Priest (0/${event.limits.Priest})`, value: '-', inline: true },
-            { name: `<:Paladin:1498698119913672736> Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
-            { name: `<:DancerBard:1498698562010353704> DancerBard (0/${event.limits.DancerBard})`, value: '-', inline: true },
-            { name: `<:Bio:1498698315254988891> Bio (0/${event.limits.Bio})`, value: '-', inline: true },
+  .setTitle(event.title)
+  .setColor('#F1C40F')
+  .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
+  .addFields(
+            { name: `<:1498698005539459122:1498698005539459122> Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
+            { name: `<:1498698148065841294:1498698148065841294> Priest (0/${event.limits.Priest})`, value: '-', inline: true },
+            { name: `<:1498698119913672736:1498698119913672736> Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
+            { name: `<:1498698562010353704:1498698562010353704> DancerBard (0/${event.limits.DancerBard})`, value: '-', inline: true },
+            { name: `<:1498698315254988891:1498698315254988891> Bio (0/${event.limits.Bio})`, value: '-', inline: true },
             { name: '\u200b', value: '----------------------------------------', inline: false },
             { name: `🪑 Bench (0)`, value: '-', inline: true },
             { name: `🅰️ Absent (0)`, value: '-', inline: true }
         )
-   .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
+  .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
 }
 
 function generateRaidComponents(eventId) {
-    // --- CUSTOM EMOJI IDs ADDED TO BUTTONS ---
     const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`role_Sniper_${eventId}`).setLabel('Sniper').setEmoji('1498698005539459122').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`role_Priest_${eventId}`).setLabel('Priest').setEmoji('1498698148065841294').setStyle(ButtonStyle.Secondary),
@@ -385,9 +467,9 @@ function generateRaidComponents(eventId) {
 
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-       .setCustomId(`status_${eventId}`)
-       .setPlaceholder('Select a status')
-       .addOptions(
+      .setCustomId(`status_${eventId}`)
+      .setPlaceholder('Select a status')
+      .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
