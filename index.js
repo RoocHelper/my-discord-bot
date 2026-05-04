@@ -118,7 +118,7 @@ client.on('interactionCreate', async (interaction) => {
                    .setTitle('📋 Informasi Bid Listing')
                    .setColor('#2ECC71')
                    .setDescription(descriptionText)
-                   .setFooter({ text: `Total item dibid: ${results.length}` });
+                   .setFooter({ text: `Jangan Bid di halaman yang lain` });
 
                 // Kirim hasil pencariannya!
                 return interaction.editReply({ embeds: new Array(resultEmbed) });
