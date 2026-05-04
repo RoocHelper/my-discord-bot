@@ -24,8 +24,6 @@ const client = new Client({
 const raidData = {};
 
 // --- KONFIGURASI 11 PROFESI ---
-// Emoji untuk BardDancer, Sniper, Bio, HighPriest, dan Paladin sudah menggunakan ID asli dari servermu!
-// Untuk job lain (LK, Assassin, dll), silakan ganti '1234567890' dengan ID emoji servermu nanti.
 const JOBS = new Array(
     { id: 'LK', label: 'LK', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
     { id: 'BardDancer', label: 'Bard/Dancer', customId: '1498698562010353704', emoji: '<:DancerBard:1498698562010353704>' },
@@ -40,7 +38,6 @@ const JOBS = new Array(
     { id: 'Paladin', label: 'Paladin', customId: '1498698119913672736', emoji: '<:Paladin:1498698119913672736>' }
 );
 
-// FUNGSI AMAN: Otomatis mengubah popout yang dikosongkan menjadi 0
 function safeGetInteger(interaction, name) {
     let value = interaction.options.getInteger(name);
     if (value === null) {
@@ -151,10 +148,10 @@ client.on('interactionCreate', async (interaction) => {
                 });
 
                 const resultEmbed = new EmbedBuilder()
-                .setTitle('📋 Informasi Bid Listing')
-                .setColor('#2ECC71')
-                .setDescription(descriptionText)
-                .setFooter({ text: `Total item dimenangkan: ${results.length}` });
+               .setTitle('📋 Informasi Bid Listing')
+               .setColor('#2ECC71')
+               .setDescription(descriptionText)
+               .setFooter({ text: `Total item dimenangkan: ${results.length}` });
 
                 return interaction.editReply({ embeds: new Array(resultEmbed) });
             } catch (error) {
@@ -219,7 +216,6 @@ client.on('interactionCreate', async (interaction) => {
                 eventId = Date.now().toString(); 
             }
 
-            // Ambil limit yang diinput user, otomatis jadi 0 jika kosong
             const limits = {
                 LK: safeGetInteger(interaction, 'lk'),
                 BardDancer: safeGetInteger(interaction, 'bard_dancer'),
@@ -267,10 +263,14 @@ client.on('interactionCreate', async (interaction) => {
             const newDateString = interaction.options.getString('new_date');
             const eventMem = raidData[eventId];
 
-            if (!eventMem) return interaction.reply({ content: '❌ Event not found or expired.', ephemeral: true });
+            if (!eventMem) {
+                return interaction.reply({ content: '❌ Event not found or expired.', ephemeral: true });
+            }
 
             const parsedDate = chrono.parseDate(newDateString);
-            if (!parsedDate) return interaction.reply({ content: '❌ I could not understand that date format.', ephemeral: true });
+            if (!parsedDate) {
+                return interaction.reply({ content: '❌ I could not understand that date format.', ephemeral: true });
+            }
             
             eventMem.time = Math.floor(parsedDate.getTime() / 1000);
 
@@ -330,8 +330,8 @@ async function processClick(interaction, isButton) {
                 }
                 const receivedEmbed = interaction.message.embeds.at(0);
                 const closedEmbed = EmbedBuilder.from(receivedEmbed)
-                  .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
-                  .setColor('#E74C3C');
+                 .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
+                 .setColor('#E74C3C');
 
                 await interaction.editReply({ embeds: new Array(closedEmbed), components: new Array() });
                 await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, '--- EVENT CLOSED ---', '---', '---');
@@ -397,6 +397,7 @@ async function processClick(interaction, isButton) {
 // ==========================================
 // FUNGSI PENDUKUNG EMBED DAN KOMPONEN
 // ==========================================
+
 function extractEventFromEmbed(receivedEmbed) {
     const fields = receivedEmbed.fields;
 
@@ -463,9 +464,9 @@ function generateDynamicEmbed(eventId, event, description, timeLine) {
     let roleTotal = 0;
 
     const newEmbed = new EmbedBuilder()
-      .setTitle(event.title)
-      .setColor('#F1C40F')
-      .setDescription(description);
+     .setTitle(event.title)
+     .setColor('#F1C40F')
+     .setDescription(description);
 
     JOBS.forEach(job => {
         if (event.limits[job.id] > 0) {
@@ -497,10 +498,10 @@ function generateDynamicComponents(eventId, event) {
         if (event.limits[job.id] > 0) {
             buttonBuffer.push(
                 new ButtonBuilder()
-                  .setCustomId(`role_${job.id}_${eventId}`)
-                  .setLabel(job.label)
-                  .setEmoji(job.customId)
-                  .setStyle(ButtonStyle.Secondary)
+                 .setCustomId(`role_${job.id}_${eventId}`)
+                 .setLabel(job.label)
+                 .setEmoji(job.customId)
+                 .setStyle(ButtonStyle.Secondary)
             );
         }
     });
@@ -512,9 +513,9 @@ function generateDynamicComponents(eventId, event) {
 
     allRows.push(new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-          .setCustomId(`status_${eventId}`)
-          .setPlaceholder('Select a status')
-          .addOptions(
+         .setCustomId(`status_${eventId}`)
+         .setPlaceholder('Select a status')
+         .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
@@ -543,6 +544,77 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
         }
     }
     
-    if (!isConfigured) return;
+    if (!isConfigured) {
+        return;
+    }
 
     try {
+        const serviceAccountAuth = new JWT({
+            email: email,
+            key: key.replace(/\\n/g, '\n'),
+            scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
+        });
+        
+        const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
+        await doc.loadInfo();
+        const sheet = doc.sheetsByIndex.at(0); 
+        
+        const rows = await sheet.getRows();
+        const safeEventId = String(eventId).replace("'", "");
+        
+        let existingRow;
+        for (let i = 0; i < rows.length; i++) {
+            let rowId = String(rows.at(i).get('EventID')).replace("'", "");
+            let rowUser = rows.at(i).get('User');
+            if (rowId === safeEventId) {
+                if (rowUser === username) {
+                    existingRow = rows.at(i);
+                }
+            }
+        }
+
+        if (existingRow) {
+            if (role) {
+                existingRow.set('Role', role);
+            }
+            if (note) {
+                if (note === 'RemoveLate') {
+                    existingRow.set('Note', ''); 
+                } else {
+                    existingRow.set('Note', note); 
+                }
+            }
+            existingRow.set('Title', eventTitle);
+            existingRow.set('Time', new Date().toLocaleString());
+            await existingRow.save(); 
+        } else {
+            let initialNote = '';
+            if (note) {
+                if (note!== 'RemoveLate') {
+                    initialNote = note;
+                }
+            }
+            
+            let initialRole = '';
+            if (role) {
+                initialRole = role;
+            }
+
+            await sheet.addRow({ 
+                EventID: eventId, 
+                Title: eventTitle, 
+                User: username, 
+                Role: initialRole, 
+                Note: initialNote,
+                Time: new Date().toLocaleString() 
+            });
+        }
+    } catch (error) {
+        console.log("Google Sheets Error:", error);
+    }
+}
+
+client.login(process.env.DISCORD_TOKEN).catch(error => {
+    console.log("LOGIN ERROR: Could not connect to Discord.");
+    console.error(error);
+});
