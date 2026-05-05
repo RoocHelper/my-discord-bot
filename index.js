@@ -25,15 +25,15 @@ const raidData = {};
 
 // --- KONFIGURASI 11 PROFESI ---
 const JOBS = new Array(
-    { id: 'LK', label: 'LK', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
+    { id: 'LK', label: 'LK', customId: '⚔️', emoji: '⚔️' },
     { id: 'BardDancer', label: 'Bard/Dancer', customId: '1498698562010353704', emoji: '<:DancerBard:1498698562010353704>' },
     { id: 'Sniper', label: 'Sniper', customId: '1498698005539459122', emoji: '<:Sniper:1498698005539459122>' },
     { id: 'BioChemist', label: 'Bio Chemist', customId: '1498698315254988891', emoji: '<:Bio:1498698315254988891>' },
-    { id: 'Mastersmith', label: 'Mastersmith', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
-    { id: 'Assassin', label: 'Assassin', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
-    { id: 'Professor', label: 'Professor', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
-    { id: 'HighWizard', label: 'High Wizard', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
-    { id: 'Champion', label: 'Champion', customId: '1234567890', emoji: '<:emoji_name:1234567890>' },
+    { id: 'Mastersmith', label: 'Mastersmith', customId: '🔨', emoji: '🔨' },
+    { id: 'Assassin', label: 'Assassin', customId: '🗡️', emoji: '🗡️' },
+    { id: 'Professor', label: 'Professor', customId: '📚', emoji: '📚' },
+    { id: 'HighWizard', label: 'High Wizard', customId: '🔮', emoji: '🔮' },
+    { id: 'Champion', label: 'Champion', customId: '🥊', emoji: '🥊' },
     { id: 'HighPriest', label: 'High Priest', customId: '1498698148065841294', emoji: '<:Priest:1498698148065841294>' },
     { id: 'Paladin', label: 'Paladin', customId: '1498698119913672736', emoji: '<:Paladin:1498698119913672736>' }
 );
