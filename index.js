@@ -23,7 +23,7 @@ const client = new Client({
 
 const raidData = {};
 
-// --- KONFIGURASI 11 PROFESI ---
+// --- KONFIGURASI 13 PROFESI ---
 const JOBS = new Array(
     { id: 'LK', label: 'LK', customId: '⚔️', emoji: '⚔️' },
     { id: 'BardDancer', label: 'Bard/Dancer', customId: '1498698562010353704', emoji: '<:DancerBard:1498698562010353704>' },
@@ -35,7 +35,9 @@ const JOBS = new Array(
     { id: 'HighWizard', label: 'High Wizard', customId: '🔮', emoji: '🔮' },
     { id: 'Champion', label: 'Champion', customId: '🥊', emoji: '🥊' },
     { id: 'HighPriest', label: 'High Priest', customId: '1498698148065841294', emoji: '<:Priest:1498698148065841294>' },
-    { id: 'Paladin', label: 'Paladin', customId: '1498698119913672736', emoji: '<:Paladin:1498698119913672736>' }
+    { id: 'Paladin', label: 'Paladin', customId: '1498698119913672736', emoji: '<:Paladin:1498698119913672736>' },
+    { id: 'DoramPhys', label: 'Doram Phys', customId: '🐱', emoji: '🐱' },
+    { id: 'DoramMagic', label: 'Doram Magic', customId: '🪄', emoji: '🪄' }
 );
 
 function safeGetInteger(interaction, name) {
@@ -78,7 +80,9 @@ client.once('ready', async () => {
                 { name: 'high_wizard', description: 'Max High Wizard (Otomatis 0)', type: 4, required: false },
                 { name: 'champion', description: 'Max Champion (Otomatis 0)', type: 4, required: false },
                 { name: 'high_priest', description: 'Max High Priest (Otomatis 0)', type: 4, required: false },
-                { name: 'paladin', description: 'Max Paladin (Otomatis 0)', type: 4, required: false }
+                { name: 'paladin', description: 'Max Paladin (Otomatis 0)', type: 4, required: false },
+                { name: 'doram_phys', description: 'Max Doram Phys (Otomatis 0)', type: 4, required: false },
+                { name: 'doram_magic', description: 'Max Doram Magic (Otomatis 0)', type: 4, required: false }
             )
         }
     ));
@@ -89,9 +93,6 @@ client.on('interactionCreate', async (interaction) => {
     
     if (interaction.isChatInputCommand()) {
         
-        // ==========================================
-        // COMMAND: /CEKBID
-        // ==========================================
         if (interaction.commandName === 'cekbid') {
             await interaction.deferReply({ ephemeral: true });
 
@@ -101,17 +102,9 @@ client.on('interactionCreate', async (interaction) => {
                 const sheetId = process.env.GOOGLE_SHEET_ID;
 
                 let isConfigured = false;
-                if (email) {
-                    if (key) {
-                        if (sheetId) {
-                            isConfigured = true;
-                        }
-                    }
-                }
+                if (email && key && sheetId) isConfigured = true;
 
-                if (!isConfigured) {
-                    return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
-                }
+                if (!isConfigured) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
 
                 const serviceAccountAuth = new JWT({
                     email: email,
@@ -126,9 +119,7 @@ client.on('interactionCreate', async (interaction) => {
 
                 const results = rows.filter(row => {
                     const player = row.get('Player yang Bid');
-                    if (player) {
-                        return player.toLowerCase() === userName;
-                    }
+                    if (player) return player.toLowerCase() === userName;
                     return false;
                 });
 
@@ -138,20 +129,17 @@ client.on('interactionCreate', async (interaction) => {
 
                 let descriptionText = `Halo **${interaction.member.displayName}**, ini adalah daftar bid yang kamu menangkan:\n\n`;
                 results.forEach(res => {
-                    let item = 'Item';
-                    if (res.get('Nama Item (Otomatis)')) item = res.get('Nama Item (Otomatis)');
-                    let page = '-';
-                    if (res.get('Halaman')) page = res.get('Halaman');
-                    let slot = '-';
-                    if (res.get('Slot')) slot = res.get('Slot');
+                    let item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : 'Item';
+                    let page = res.get('Halaman')? res.get('Halaman') : '-';
+                    let slot = res.get('Slot')? res.get('Slot') : '-';
                     descriptionText += `📦 **${item}** (Halaman: ${page}, Slot: ${slot})\n`;
                 });
 
                 const resultEmbed = new EmbedBuilder()
-               .setTitle('📋 Informasi Bid Listing')
-               .setColor('#2ECC71')
-               .setDescription(descriptionText)
-               .setFooter({ text: `Total item dimenangkan: ${results.length}` });
+              .setTitle('📋 Informasi Bid Listing')
+              .setColor('#2ECC71')
+              .setDescription(descriptionText)
+              .setFooter({ text: `Total item dimenangkan: ${results.length}` });
 
                 return interaction.editReply({ embeds: new Array(resultEmbed) });
             } catch (error) {
@@ -159,9 +147,6 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // ==========================================
-        // COMMAND: /ABSEN (Dinamis 11 Job)
-        // ==========================================
         if (interaction.commandName === 'absen') {
             await interaction.deferReply(); 
 
@@ -181,13 +166,7 @@ client.on('interactionCreate', async (interaction) => {
                 const sheetId = process.env.GOOGLE_SHEET_ID;
 
                 let isConfigured = false;
-                if (email) {
-                    if (key) {
-                        if (sheetId) {
-                            isConfigured = true;
-                        }
-                    }
-                }
+                if (email && key && sheetId) isConfigured = true;
 
                 if (isConfigured) {
                     const serviceAccountAuth = new JWT({
@@ -204,13 +183,10 @@ client.on('interactionCreate', async (interaction) => {
                     if (rows.length > 0) {
                         for (let i = 0; i < rows.length; i++) {
                             let rowId = parseInt(String(rows.at(i).get('EventID')).replace("'", ""));
-                            if (rowId > lastId) {
-                                lastId = rowId;
-                            }
+                            if (rowId > lastId) lastId = rowId;
                         }
                     }
-                    let nextIdNum = lastId + 1;
-                    eventId = nextIdNum.toString();
+                    eventId = (lastId + 1).toString();
                 }
             } catch (error) {
                 eventId = Date.now().toString(); 
@@ -227,7 +203,9 @@ client.on('interactionCreate', async (interaction) => {
                 HighWizard: safeGetInteger(interaction, 'high_wizard'),
                 Champion: safeGetInteger(interaction, 'champion'),
                 HighPriest: safeGetInteger(interaction, 'high_priest'),
-                Paladin: safeGetInteger(interaction, 'paladin')
+                Paladin: safeGetInteger(interaction, 'paladin'),
+                DoramPhys: safeGetInteger(interaction, 'doram_phys'),
+                DoramMagic: safeGetInteger(interaction, 'doram_magic')
             };
 
             const event = {
@@ -237,7 +215,8 @@ client.on('interactionCreate', async (interaction) => {
                 players: {
                     LK: new Array(), BardDancer: new Array(), Sniper: new Array(), BioChemist: new Array(),
                     Mastersmith: new Array(), Assassin: new Array(), Professor: new Array(), HighWizard: new Array(),
-                    Champion: new Array(), HighPriest: new Array(), Paladin: new Array(), Bench: new Array(), Absent: new Array()
+                    Champion: new Array(), HighPriest: new Array(), Paladin: new Array(), DoramPhys: new Array(), 
+                    DoramMagic: new Array(), Bench: new Array(), Absent: new Array()
                 }
             };
 
@@ -255,22 +234,15 @@ client.on('interactionCreate', async (interaction) => {
             raidData[eventId] = { messageId: reply.id, channelId: reply.channelId, time: unixTime };
         }
 
-        // ==========================================
-        // COMMAND: /EDITRAID
-        // ==========================================
         if (interaction.commandName === 'editraid') {
             const eventId = interaction.options.getString('event_id');
             const newDateString = interaction.options.getString('new_date');
             const eventMem = raidData[eventId];
 
-            if (!eventMem) {
-                return interaction.reply({ content: '❌ Event not found or expired.', ephemeral: true });
-            }
+            if (!eventMem) return interaction.reply({ content: '❌ Event not found or expired.', ephemeral: true });
 
             const parsedDate = chrono.parseDate(newDateString);
-            if (!parsedDate) {
-                return interaction.reply({ content: '❌ I could not understand that date format.', ephemeral: true });
-            }
+            if (!parsedDate) return interaction.reply({ content: '❌ I could not understand that date format.', ephemeral: true });
             
             eventMem.time = Math.floor(parsedDate.getTime() / 1000);
 
@@ -302,9 +274,6 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// ==========================================
-// MAGIC CLICK HANDLER
-// ==========================================
 async function processClick(interaction, isButton) {
     try {
         await interaction.deferUpdate();
@@ -379,12 +348,8 @@ async function processClick(interaction, isButton) {
     } catch (error) {
         console.log("CLICK ERROR:", error);
         let isAlreadyReplied = false;
-        if (interaction.deferred) {
-            isAlreadyReplied = true;
-        }
-        if (interaction.replied) {
-            isAlreadyReplied = true;
-        }
+        if (interaction.deferred) isAlreadyReplied = true;
+        if (interaction.replied) isAlreadyReplied = true;
 
         if (isAlreadyReplied) {
             await interaction.followUp({ content: `❌ Error caught: ${error.message}`, ephemeral: true }).catch(console.error);
@@ -394,25 +359,16 @@ async function processClick(interaction, isButton) {
     }
 }
 
-// ==========================================
-// FUNGSI PENDUKUNG EMBED DAN KOMPONEN
-// ==========================================
-
 function extractEventFromEmbed(receivedEmbed) {
     const fields = receivedEmbed.fields;
 
     const getFieldData = (label) => {
         const field = fields.find(f => f.name.includes(label));
         let isMissing = false;
-        if (!field) {
-            isMissing = true;
-        } else if (field.value === '-') {
-            isMissing = true;
-        }
+        if (!field) isMissing = true;
+        else if (field.value === '-') isMissing = true;
 
-        if (isMissing) {
-            return new Array();
-        }
+        if (isMissing) return new Array();
         return field.value.split('\n');
     };
 
@@ -420,9 +376,7 @@ function extractEventFromEmbed(receivedEmbed) {
         const field = fields.find(f => f.name.includes(label));
         if (!field) return 0;
         const match = field.name.match(/\d+\/(\d+)\)/);
-        if (match) {
-            return parseInt(match[1]);
-        }
+        if (match) return parseInt(match[1]);
         return 0;
     };
 
@@ -439,7 +393,9 @@ function extractEventFromEmbed(receivedEmbed) {
             HighWizard: getLimit('High Wizard'),
             Champion: getLimit('Champion'),
             HighPriest: getLimit('High Priest'),
-            Paladin: getLimit('Paladin')
+            Paladin: getLimit('Paladin'),
+            DoramPhys: getLimit('Doram Phys'),
+            DoramMagic: getLimit('Doram Magic')
         },
         players: {
             LK: getFieldData('LK'),
@@ -453,6 +409,8 @@ function extractEventFromEmbed(receivedEmbed) {
             Champion: getFieldData('Champion'),
             HighPriest: getFieldData('High Priest'),
             Paladin: getFieldData('Paladin'),
+            DoramPhys: getFieldData('Doram Phys'),
+            DoramMagic: getFieldData('Doram Magic'),
             Bench: getFieldData('Bench'),
             Absent: getFieldData('Absent')
         }
@@ -536,17 +494,8 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
     const sheetId = process.env.GOOGLE_SHEET_ID;
 
     let isConfigured = false;
-    if (email) {
-        if (key) {
-            if (sheetId) {
-                isConfigured = true;
-            }
-        }
-    }
-    
-    if (!isConfigured) {
-        return;
-    }
+    if (email && key && sheetId) isConfigured = true;
+    if (!isConfigured) return;
 
     try {
         const serviceAccountAuth = new JWT({
@@ -566,17 +515,13 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
         for (let i = 0; i < rows.length; i++) {
             let rowId = String(rows.at(i).get('EventID')).replace("'", "");
             let rowUser = rows.at(i).get('User');
-            if (rowId === safeEventId) {
-                if (rowUser === username) {
-                    existingRow = rows.at(i);
-                }
+            if (rowId === safeEventId && rowUser === username) {
+                existingRow = rows.at(i);
             }
         }
 
         if (existingRow) {
-            if (role) {
-                existingRow.set('Role', role);
-            }
+            if (role) existingRow.set('Role', role);
             if (note) {
                 if (note === 'RemoveLate') {
                     existingRow.set('Note', ''); 
@@ -589,16 +534,8 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
             await existingRow.save(); 
         } else {
             let initialNote = '';
-            if (note) {
-                if (note!== 'RemoveLate') {
-                    initialNote = note;
-                }
-            }
-            
-            let initialRole = '';
-            if (role) {
-                initialRole = role;
-            }
+            if (note && note!== 'RemoveLate') initialNote = note;
+            let initialRole = role? role : '';
 
             await sheet.addRow({ 
                 EventID: eventId, 
