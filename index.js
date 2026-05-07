@@ -103,7 +103,7 @@ client.on('interactionCreate', async (interaction) => {
         // COMMAND: /CEKBIDALL (Menampilkan Semua Data)
         // ==========================================
         if (interaction.commandName === 'cekbidall') {
-            await interaction.deferReply(); // Tidak ephemeral, agar semua orang bisa melihat halamannya
+            await interaction.deferReply({ ephemeral: true }); // ephemeral, agar semua orang tidak bisa melihat halamannya
 
             try {
                 const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
