@@ -22,7 +22,7 @@ const client = new Client({
 });
 
 const raidData = {};
-const paginationData = {}; // Memory khusus untuk menyimpan sesi halaman (Next/Previous)
+const paginationData = {}; 
 
 // --- KONFIGURASI 13 PROFESI ---
 const JOBS = new Array(
@@ -58,9 +58,12 @@ client.once('ready', async () => {
             description: 'Cek daftar kemenangan bid feather & fragment kamu!'
         },
         {
-            // COMMAND BARU: Cek Bid All
             name: 'cekbidall',
             description: 'Tampilkan seluruh bid list yang ada menggunakan buku/halaman!'
+        },
+        {
+            name: 'bidleagueprice',
+            description: 'Mengecek daftar harga bid Guild League'
         },
         {
             name: 'editraid',
@@ -98,12 +101,12 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
     
     if (interaction.isChatInputCommand()) {
-        
+
         // ==========================================
-        // COMMAND: /CEKBIDALL (Menampilkan Semua Data)
+        // COMMAND: /BIDLEAGUEPRICE
         // ==========================================
-        if (interaction.commandName === 'cekbidall') {
-            await interaction.deferReply({ ephemeral: true }); // ephemeral, agar semua orang tidak bisa melihat halamannya
+        if (interaction.commandName === 'bidleagueprice') {
+            await interaction.deferReply(); 
 
             try {
                 const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -130,6 +133,77 @@ client.on('interactionCreate', async (interaction) => {
                 });
                 const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
                 await doc.loadInfo();
+                
+                // MENGAMBIL TAB KE-3 ("League Prize" berada di Indeks 2)
+                const sheet = doc.sheetsByIndex.at(2);
+                if (!sheet) {
+                    return interaction.editReply({ content: '❌ Tab Sheet ke-3 (League Prize) tidak ditemukan!' });
+                }
+                
+                const rows = await sheet.getRows();
+
+                if (rows.length === 0) {
+                    return interaction.editReply({ content: '❌ Data harga di Google Sheets (Tab 3) masih kosong.' });
+                }
+
+                let descriptionText = `**Daftar Harga Bid League:**\n\n`;
+                rows.forEach(res => {
+                    let item = '-';
+                    let price = '-';
+
+                    if (res._rawData) {
+                        if (res._rawData.at(0)) item = res._rawData.at(0);
+                        if (res._rawData.at(1)) price = res._rawData.at(1);
+                    }
+                    
+                    descriptionText += `💎 **${item}** : ${price}\n`;
+                });
+
+                const resultEmbed = new EmbedBuilder()
+                  .setTitle('💰 Informasi Harga Bid League')
+                  .setColor('#FFD700') 
+                  .setDescription(descriptionText.substring(0, 4096)); 
+
+                return interaction.editReply({ embeds: new Array(resultEmbed) });
+            } catch (error) {
+                console.log("BIDLEAGUEPRICE ERROR:", error);
+                return interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
+            }
+        }
+        
+        // ==========================================
+        // COMMAND: /CEKBIDALL
+        // ==========================================
+        if (interaction.commandName === 'cekbidall') {
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+                const key = process.env.GOOGLE_PRIVATE_KEY;
+                const sheetId = process.env.GOOGLE_SHEET_ID;
+
+                let isConfigured = false;
+                if (email) {
+                    if (key) {
+                        if (sheetId) {
+                            isConfigured = true;
+                        }
+                    }
+                }
+
+                if (!isConfigured) {
+                    return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
+                }
+
+                const serviceAccountAuth = new JWT({
+                    email: email,
+                    key: key.replace(/\\n/g, '\n'),
+                    scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
+                });
+                const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
+                await doc.loadInfo();
+                
+                // MENGAMBIL TAB KE-2 ("GL Omni Ruler" berada di Indeks 1)
                 const sheet = doc.sheetsByIndex.at(1);
                 const rows = await sheet.getRows();
 
@@ -137,7 +211,6 @@ client.on('interactionCreate', async (interaction) => {
                     return interaction.editReply({ content: '❌ Data bid di Google Sheets masih kosong.' });
                 }
 
-                // Format semua baris menjadi list teks yang rapi
                 const allItems = new Array();
                 rows.forEach(res => {
                     let player = res.get('Player yang Bid');
@@ -152,7 +225,6 @@ client.on('interactionCreate', async (interaction) => {
                     allItems.push(`Hal: **${page}** | Slot: **${slot}** | 📦 **${item}** — 👤 ${player}`);
                 });
 
-                // Pecah data (Misalnya 15 baris per 1 halaman) agar tidak melanggar batas Discord
                 const pages = new Array();
                 const itemsPerPage = 15;
                 for (let i = 0; i < allItems.length; i += itemsPerPage) {
@@ -160,7 +232,6 @@ client.on('interactionCreate', async (interaction) => {
                     pages.push(chunk.join('\n'));
                 }
 
-                // Simpan halaman ke memori sementara bot
                 const pageId = Date.now().toString();
                 paginationData[pageId] = {
                     pages: pages,
@@ -170,12 +241,11 @@ client.on('interactionCreate', async (interaction) => {
                 };
 
                 const embed = new EmbedBuilder()
-                 .setTitle('📋 Seluruh Informasi Bid Listing')
-                 .setColor('#3498DB')
-                 .setDescription(pages.at(0))
-                 .setFooter({ text: `Halaman 1 dari ${pages.length} | Total Data: ${allItems.length}` });
+               .setTitle('📋 Seluruh Informasi Bid Listing')
+               .setColor('#3498DB')
+               .setDescription(pages.at(0))
+               .setFooter({ text: `Halaman 1 dari ${pages.length} | Total Data: ${allItems.length}` });
 
-                // Generate tombol navigasinya!
                 const buttons = generatePaginationButtons(pageId, 0, pages.length);
 
                 return interaction.editReply({ embeds: new Array(embed), components: new Array(buttons) });
@@ -215,6 +285,8 @@ client.on('interactionCreate', async (interaction) => {
                 });
                 const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
                 await doc.loadInfo();
+                
+                // MENGAMBIL TAB KE-2 ("GL Omni Ruler" berada di Indeks 1)
                 const sheet = doc.sheetsByIndex.at(1);
                 const rows = await sheet.getRows();
                 const userName = interaction.member.displayName.toLowerCase();
@@ -243,10 +315,10 @@ client.on('interactionCreate', async (interaction) => {
                 });
 
                 const resultEmbed = new EmbedBuilder()
-             .setTitle('📋 Informasi Bid Listing')
-             .setColor('#2ECC71')
-             .setDescription(descriptionText)
-             .setFooter({ text: `Total item dimenangkan: ${results.length}` });
+           .setTitle('📋 Informasi Bid Listing')
+           .setColor('#2ECC71')
+           .setDescription(descriptionText)
+           .setFooter({ text: `Total item dimenangkan: ${results.length}` });
 
                 return interaction.editReply({ embeds: new Array(resultEmbed) });
             } catch (error) {
@@ -292,6 +364,8 @@ client.on('interactionCreate', async (interaction) => {
                     });
                     const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
                     await doc.loadInfo();
+                    
+                    // MENGAMBIL TAB KE-1 ("Sheet1" berada di Indeks 0)
                     const sheet = doc.sheetsByIndex.at(0);
                     const rows = await sheet.getRows();
 
@@ -361,14 +435,10 @@ client.on('interactionCreate', async (interaction) => {
             const newDateString = interaction.options.getString('new_date');
             const eventMem = raidData[eventId];
 
-            if (!eventMem) {
-                return interaction.reply({ content: '❌ Event not found or expired.', ephemeral: true });
-            }
+            if (!eventMem) return interaction.reply({ content: '❌ Event not found or expired.', ephemeral: true });
 
             const parsedDate = chrono.parseDate(newDateString);
-            if (!parsedDate) {
-                return interaction.reply({ content: '❌ I could not understand that date format.', ephemeral: true });
-            }
+            if (!parsedDate) return interaction.reply({ content: '❌ I could not understand that date format.', ephemeral: true });
             
             eventMem.time = Math.floor(parsedDate.getTime() / 1000);
 
@@ -420,7 +490,6 @@ async function processClick(interaction, isButton) {
             eventId = parts.at(2);
         }
 
-        // --- SISTEM PAGINATION UNTUK CEKBIDALL ---
         if (action === 'page') {
             let direction = choice; 
             let pageId = eventId; 
@@ -430,34 +499,28 @@ async function processClick(interaction, isButton) {
                 return interaction.followUp({ content: '❌ Sesi halaman ini sudah kedaluwarsa.', ephemeral: true });
             }
 
-            // Pastikan hanya user yang request yang bisa geser halamannya
             if (interaction.user.id!== pageData.userId) {
                 return interaction.followUp({ content: '❌ Hanya yang merequest command ini yang bisa membalik halaman.', ephemeral: true });
             }
 
             if (direction === 'prev') {
-                if (pageData.currentPage > 0) {
-                    pageData.currentPage--;
-                }
+                if (pageData.currentPage > 0) pageData.currentPage--;
             } else if (direction === 'next') {
                 let maxPage = pageData.pages.length - 1;
-                if (pageData.currentPage < maxPage) {
-                    pageData.currentPage++;
-                }
+                if (pageData.currentPage < maxPage) pageData.currentPage++;
             }
 
             const embed = new EmbedBuilder()
-               .setTitle('📋 Seluruh Informasi Bid Listing')
-               .setColor('#3498DB')
-               .setDescription(pageData.pages.at(pageData.currentPage))
-               .setFooter({ text: `Halaman ${pageData.currentPage + 1} dari ${pageData.pages.length} | Total Data: ${pageData.totalItems}` });
+             .setTitle('📋 Seluruh Informasi Bid Listing')
+             .setColor('#3498DB')
+             .setDescription(pageData.pages.at(pageData.currentPage))
+             .setFooter({ text: `Halaman ${pageData.currentPage + 1} dari ${pageData.pages.length} | Total Data: ${pageData.totalItems}` });
 
             const buttons = generatePaginationButtons(pageId, pageData.currentPage, pageData.pages.length);
 
             return interaction.editReply({ embeds: new Array(embed), components: new Array(buttons) });
         }
 
-        // --- CLOSE EVENT LOGIC ---
         if (action === 'admin') {
             if (choice === 'close') {
                 let hasPerms = interaction.member.permissions.has(PermissionFlagsBits.ManageMessages);
@@ -466,8 +529,8 @@ async function processClick(interaction, isButton) {
                 }
                 const receivedEmbed = interaction.message.embeds.at(0);
                 const closedEmbed = EmbedBuilder.from(receivedEmbed)
-                 .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
-                 .setColor('#E74C3C');
+                .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
+                .setColor('#E74C3C');
 
                 await interaction.editReply({ embeds: new Array(closedEmbed), components: new Array() });
                 await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, '--- EVENT CLOSED ---', '---', '---');
@@ -478,7 +541,10 @@ async function processClick(interaction, isButton) {
         const receivedEmbed = interaction.message.embeds.at(0);
 
         const lateStatuses = new Array('Late', 'RemoveLate');
-        if (lateStatuses.includes(choice)) {
+        let isLateStatus = false;
+        if (lateStatuses.includes(choice)) isLateStatus = true;
+
+        if (isLateStatus) {
             await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, interaction.member.displayName, null, choice); 
             return interaction.followUp({ content: "⏱️ Your status has been noted in the spreadsheet!", ephemeral: true });
         }
@@ -498,6 +564,10 @@ async function processClick(interaction, isButton) {
 
         event.players[choice].push(userName);
 
+        const roleTotal = event.players.LK.length + event.players.BardDancer.length + event.players.Sniper.length + event.players.BioChemist.length + event.players.Mastersmith.length + event.players.Assassin.length + event.players.Professor.length + event.players.HighWizard.length + event.players.Champion.length + event.players.HighPriest.length + event.players.Paladin.length + event.players.DoramPhys.length + event.players.DoramMagic.length;
+        const statusTotal = event.players.Bench.length + event.players.Absent.length;
+        const grandTotal = roleTotal + statusTotal;
+
         const oldFooter = receivedEmbed.footer.text;
         const timeLine = oldFooter.split('\n').at(2); 
 
@@ -515,12 +585,8 @@ async function processClick(interaction, isButton) {
     } catch (error) {
         console.log("CLICK ERROR:", error);
         let isAlreadyReplied = false;
-        if (interaction.deferred) {
-            isAlreadyReplied = true;
-        }
-        if (interaction.replied) {
-            isAlreadyReplied = true;
-        }
+        if (interaction.deferred) isAlreadyReplied = true;
+        if (interaction.replied) isAlreadyReplied = true;
 
         if (isAlreadyReplied) {
             await interaction.followUp({ content: `❌ Error caught: ${error.message}`, ephemeral: true }).catch(console.error);
@@ -557,7 +623,7 @@ function extractEventFromEmbed(receivedEmbed) {
         if (!field) return 0;
         const match = field.name.match(/\d+\/(\d+)\)/);
         if (match) {
-            return parseInt(match[2]);
+            return parseInt(match[1]);
         }
         return 0;
     };
@@ -604,9 +670,9 @@ function generateDynamicEmbed(eventId, event, description, timeLine) {
     let roleTotal = 0;
 
     const newEmbed = new EmbedBuilder()
-    .setTitle(event.title)
-    .setColor('#F1C40F')
-    .setDescription(description);
+     .setTitle(event.title)
+     .setColor('#F1C40F')
+     .setDescription(description);
 
     JOBS.forEach(job => {
         if (event.limits[job.id] > 0) {
@@ -638,10 +704,10 @@ function generateDynamicComponents(eventId, event) {
         if (event.limits[job.id] > 0) {
             buttonBuffer.push(
                 new ButtonBuilder()
-                .setCustomId(`role_${job.id}_${eventId}`)
-                .setLabel(job.label)
-                .setEmoji(job.customId)
-                .setStyle(ButtonStyle.Secondary)
+                 .setCustomId(`role_${job.id}_${eventId}`)
+                 .setLabel(job.label)
+                 .setEmoji(job.customId)
+                 .setStyle(ButtonStyle.Secondary)
             );
         }
     });
@@ -653,9 +719,9 @@ function generateDynamicComponents(eventId, event) {
 
     allRows.push(new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-        .setCustomId(`status_${eventId}`)
-        .setPlaceholder('Select a status')
-        .addOptions(
+         .setCustomId(`status_${eventId}`)
+         .setPlaceholder('Select a status')
+         .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
@@ -670,30 +736,29 @@ function generateDynamicComponents(eventId, event) {
     return allRows;
 }
 
-// Bantuan untuk mengenerate tombol Previous & Next
 function generatePaginationButtons(pageId, currentPage, totalPages) {
     let prevDisabled = false;
     if (currentPage === 0) {
-        prevDisabled = true; // Matikan tombol Previous jika di halaman pertama
+        prevDisabled = true; 
     }
 
     let nextDisabled = false;
     let lastPage = totalPages - 1;
     if (currentPage === lastPage) {
-        nextDisabled = true; // Matikan tombol Next jika di halaman terakhir
+        nextDisabled = true; 
     }
 
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-           .setCustomId(`page_prev_${pageId}`)
-           .setLabel('◀ Previous')
-           .setStyle(ButtonStyle.Primary)
-           .setDisabled(prevDisabled),
+         .setCustomId(`page_prev_${pageId}`)
+         .setLabel('◀ Previous')
+         .setStyle(ButtonStyle.Primary)
+         .setDisabled(prevDisabled),
         new ButtonBuilder()
-           .setCustomId(`page_next_${pageId}`)
-           .setLabel('Next ▶')
-           .setStyle(ButtonStyle.Primary)
-           .setDisabled(nextDisabled)
+         .setCustomId(`page_next_${pageId}`)
+         .setLabel('Next ▶')
+         .setStyle(ButtonStyle.Primary)
+         .setDisabled(nextDisabled)
     );
 
     return row;
@@ -726,6 +791,8 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
         
         const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
         await doc.loadInfo();
+        
+        // MENGAMBIL TAB KE-1 (Indeks 0) UNTUK DATA ABSEN
         const sheet = doc.sheetsByIndex.at(0); 
         
         const rows = await sheet.getRows();
