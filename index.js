@@ -106,7 +106,7 @@ client.on('interactionCreate', async (interaction) => {
         // COMMAND: /BIDLEAGUEPRICE
         // ==========================================
         if (interaction.commandName === 'bidleagueprice') {
-            await interaction.deferReply(); 
+            await interaction.deferReply({ ephemeral: true }); 
 
             try {
                 const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -143,28 +143,59 @@ client.on('interactionCreate', async (interaction) => {
                 const rows = await sheet.getRows();
 
                 if (rows.length === 0) {
-                    return interaction.editReply({ content: '❌ Data harga di Google Sheets (Tab 3) masih kosong.' });
+                    return interaction.editReply({ content: '❌ Data di Google Sheets (Tab 3) masih kosong.' });
                 }
 
-                let descriptionText = `**Daftar Harga Bid League:**\n\n`;
+                const allItems = new Array();
                 rows.forEach(res => {
-                    let item = '-';
-                    let price = '-';
+                    // Ekstraksi data secara dinamis berdasarkan gambar Excel kamu
+                    let page = res.get('Halaman');
+                    if (!page) { if (res._rawData) page = res._rawData.at(0); }
+                    if (!page) page = '-';
 
-                    if (res._rawData) {
-                        if (res._rawData.at(0)) item = res._rawData.at(0);
-                        if (res._rawData.at(1)) price = res._rawData.at(1);
-                    }
+                    let slot = res.get('Slot');
+                    if (!slot) { if (res._rawData) slot = res._rawData.at(1); }
+                    if (!slot) slot = '-';
                     
-                    descriptionText += `💎 **${item}** : ${price}\n`;
+                    let item = res.get('Nama Item (Otomatis)');
+                    if (!item) { if (res._rawData) item = res._rawData.at(2); }
+                    if (!item) item = 'Item';
+
+                    let bidderOrPrice = res.get('Player yang Bid');
+                    if (!bidderOrPrice) { if (res._rawData) bidderOrPrice = res._rawData.at(3); }
+                    if (!bidderOrPrice) bidderOrPrice = '-';
+                    
+                    allItems.push(`Hal: **${page}** | Slot: **${slot}** | 💎 **${item}** — 👤 ${bidderOrPrice}`);
                 });
 
-                const resultEmbed = new EmbedBuilder()
-                  .setTitle('💰 Informasi Harga Bid League')
-                  .setColor('#FFD700') 
-                  .setDescription(descriptionText.substring(0, 4096)); 
+                // Pecah data menjadi beberapa halaman (15 data per halaman)
+                const pages = new Array();
+                const itemsPerPage = 15;
+                for (let i = 0; i < allItems.length; i += itemsPerPage) {
+                    let chunk = allItems.slice(i, i + itemsPerPage);
+                    pages.push(chunk.join('\n'));
+                }
 
-                return interaction.editReply({ embeds: new Array(resultEmbed) });
+                // Simpan halaman ke memori
+                const pageId = Date.now().toString();
+                paginationData[pageId] = {
+                    pages: pages,
+                    currentPage: 0,
+                    userId: interaction.user.id,
+                    totalItems: allItems.length,
+                    title: '💰 Informasi Harga Bid League',
+                    color: '#FFD700'
+                };
+
+                const resultEmbed = new EmbedBuilder()
+                 .setTitle(paginationData[pageId].title)
+                 .setColor(paginationData[pageId].color)
+                 .setDescription(pages.at(0))
+                 .setFooter({ text: `Halaman 1 dari ${pages.length} | Total Data: ${allItems.length}` });
+
+                const buttons = generatePaginationButtons(pageId, 0, pages.length);
+
+                return interaction.editReply({ embeds: new Array(resultEmbed), components: new Array(buttons) });
             } catch (error) {
                 console.log("BIDLEAGUEPRICE ERROR:", error);
                 return interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
@@ -237,12 +268,14 @@ client.on('interactionCreate', async (interaction) => {
                     pages: pages,
                     currentPage: 0,
                     userId: interaction.user.id,
-                    totalItems: allItems.length
+                    totalItems: allItems.length,
+                    title: '📋 Seluruh Informasi Bid Listing',
+                    color: '#3498DB'
                 };
 
                 const embed = new EmbedBuilder()
-               .setTitle('📋 Seluruh Informasi Bid Listing')
-               .setColor('#3498DB')
+               .setTitle(paginationData[pageId].title)
+               .setColor(paginationData[pageId].color)
                .setDescription(pages.at(0))
                .setFooter({ text: `Halaman 1 dari ${pages.length} | Total Data: ${allItems.length}` });
 
@@ -286,7 +319,6 @@ client.on('interactionCreate', async (interaction) => {
                 const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
                 await doc.loadInfo();
                 
-                // MENGAMBIL TAB KE-2 ("GL Omni Ruler" berada di Indeks 1)
                 const sheet = doc.sheetsByIndex.at(1);
                 const rows = await sheet.getRows();
                 const userName = interaction.member.displayName.toLowerCase();
@@ -315,10 +347,10 @@ client.on('interactionCreate', async (interaction) => {
                 });
 
                 const resultEmbed = new EmbedBuilder()
-           .setTitle('📋 Informasi Bid Listing')
-           .setColor('#2ECC71')
-           .setDescription(descriptionText)
-           .setFooter({ text: `Total item dimenangkan: ${results.length}` });
+          .setTitle('📋 Informasi Bid Listing')
+          .setColor('#2ECC71')
+          .setDescription(descriptionText)
+          .setFooter({ text: `Total item dimenangkan: ${results.length}` });
 
                 return interaction.editReply({ embeds: new Array(resultEmbed) });
             } catch (error) {
@@ -365,7 +397,6 @@ client.on('interactionCreate', async (interaction) => {
                     const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
                     await doc.loadInfo();
                     
-                    // MENGAMBIL TAB KE-1 ("Sheet1" berada di Indeks 0)
                     const sheet = doc.sheetsByIndex.at(0);
                     const rows = await sheet.getRows();
 
@@ -490,6 +521,7 @@ async function processClick(interaction, isButton) {
             eventId = parts.at(2);
         }
 
+        // --- SISTEM PAGINATION GLOBAL ---
         if (action === 'page') {
             let direction = choice; 
             let pageId = eventId; 
@@ -511,8 +543,8 @@ async function processClick(interaction, isButton) {
             }
 
             const embed = new EmbedBuilder()
-             .setTitle('📋 Seluruh Informasi Bid Listing')
-             .setColor('#3498DB')
+             .setTitle(pageData.title)
+             .setColor(pageData.color)
              .setDescription(pageData.pages.at(pageData.currentPage))
              .setFooter({ text: `Halaman ${pageData.currentPage + 1} dari ${pageData.pages.length} | Total Data: ${pageData.totalItems}` });
 
@@ -670,9 +702,9 @@ function generateDynamicEmbed(eventId, event, description, timeLine) {
     let roleTotal = 0;
 
     const newEmbed = new EmbedBuilder()
-     .setTitle(event.title)
-     .setColor('#F1C40F')
-     .setDescription(description);
+    .setTitle(event.title)
+    .setColor('#F1C40F')
+    .setDescription(description);
 
     JOBS.forEach(job => {
         if (event.limits[job.id] > 0) {
@@ -704,10 +736,10 @@ function generateDynamicComponents(eventId, event) {
         if (event.limits[job.id] > 0) {
             buttonBuffer.push(
                 new ButtonBuilder()
-                 .setCustomId(`role_${job.id}_${eventId}`)
-                 .setLabel(job.label)
-                 .setEmoji(job.customId)
-                 .setStyle(ButtonStyle.Secondary)
+                .setCustomId(`role_${job.id}_${eventId}`)
+                .setLabel(job.label)
+                .setEmoji(job.customId)
+                .setStyle(ButtonStyle.Secondary)
             );
         }
     });
@@ -719,9 +751,9 @@ function generateDynamicComponents(eventId, event) {
 
     allRows.push(new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-         .setCustomId(`status_${eventId}`)
-         .setPlaceholder('Select a status')
-         .addOptions(
+        .setCustomId(`status_${eventId}`)
+        .setPlaceholder('Select a status')
+        .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
@@ -750,15 +782,15 @@ function generatePaginationButtons(pageId, currentPage, totalPages) {
 
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-         .setCustomId(`page_prev_${pageId}`)
-         .setLabel('◀ Previous')
-         .setStyle(ButtonStyle.Primary)
-         .setDisabled(prevDisabled),
+        .setCustomId(`page_prev_${pageId}`)
+        .setLabel('◀ Previous')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(prevDisabled),
         new ButtonBuilder()
-         .setCustomId(`page_next_${pageId}`)
-         .setLabel('Next ▶')
-         .setStyle(ButtonStyle.Primary)
-         .setDisabled(nextDisabled)
+        .setCustomId(`page_next_${pageId}`)
+        .setLabel('Next ▶')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(nextDisabled)
     );
 
     return row;
