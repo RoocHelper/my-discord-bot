@@ -55,15 +55,19 @@ client.once('ready', async () => {
     await client.application.commands.set(new Array(
         {
             name: 'cekbid',
-            description: 'Cek daftar kemenangan bid feather & fragment kamu!'
+            description: 'Cek daftar kemenangan bid personal di tab GL Omni Ruler!'
         },
         {
             name: 'cekbidall',
-            description: 'Tampilkan seluruh bid list yang ada menggunakan buku/halaman!'
+            description: 'Tampilkan seluruh bid list di tab GL Omni Ruler menggunakan halaman!'
         },
         {
-            name: 'bidleagueprice',
-            description: 'Mengecek daftar harga bid Guild League'
+            name: 'cekprize',
+            description: 'Cek daftar kemenangan bid personal di tab League Prize!'
+        },
+        {
+            name: 'cekprizeall',
+            description: 'Tampilkan seluruh bid list di tab League Prize menggunakan halaman!'
         },
         {
             name: 'editraid',
@@ -103,10 +107,10 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
 
         // ==========================================
-        // COMMAND: /BIDLEAGUEPRICE
+        // COMMAND: /CEKPRIZE (League Prize - Personal)
         // ==========================================
-        if (interaction.commandName === 'bidleagueprice') {
-            await interaction.deferReply({ ephemeral: true }); 
+        if (interaction.commandName === 'cekprize') {
+            await interaction.deferReply({ ephemeral: true });
 
             try {
                 const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -114,17 +118,9 @@ client.on('interactionCreate', async (interaction) => {
                 const sheetId = process.env.GOOGLE_SHEET_ID;
 
                 let isConfigured = false;
-                if (email) {
-                    if (key) {
-                        if (sheetId) {
-                            isConfigured = true;
-                        }
-                    }
-                }
+                if (email && key && sheetId) isConfigured = true;
 
-                if (!isConfigured) {
-                    return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
-                }
+                if (!isConfigured) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
 
                 const serviceAccountAuth = new JWT({
                     email: email,
@@ -134,41 +130,86 @@ client.on('interactionCreate', async (interaction) => {
                 const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
                 await doc.loadInfo();
                 
-                // MENGAMBIL TAB KE-3 ("League Prize" berada di Indeks 2)
+                // Mengambil Tab ke-3 ("League Prize" berada di Indeks 2)
                 const sheet = doc.sheetsByIndex.at(2);
-                if (!sheet) {
-                    return interaction.editReply({ content: '❌ Tab Sheet ke-3 (League Prize) tidak ditemukan!' });
+                if (!sheet) return interaction.editReply({ content: '❌ Tab Sheet ke-3 (League Prize) tidak ditemukan!' });
+                
+                const rows = await sheet.getRows();
+                const userName = interaction.member.displayName.toLowerCase();
+
+                const results = rows.filter(row => {
+                    let player = row.get('Player yang Bid');
+                    if (!player) { if (row._rawData) player = row._rawData.at(3); }
+                    if (player) return player.toLowerCase() === userName;
+                    return false;
+                });
+
+                if (results.length === 0) {
+                    return interaction.editReply({ content: `❌ Halo **${interaction.member.displayName}**, nama kamu **tidak ada** di bid League Prize saat ini.` });
                 }
+
+                let descriptionText = `Halo **${interaction.member.displayName}**, ini adalah daftar kemenangan League Prize kamu:\n\n`;
+                results.forEach(res => {
+                    let page = res.get('Halaman')? res.get('Halaman') : (res._rawData? res._rawData.at(0) : '-');
+                    let slot = res.get('Slot')? res.get('Slot') : (res._rawData? res._rawData.at(1) : '-');
+                    let item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : (res._rawData? res._rawData.at(2) : 'Item');
+                    descriptionText += `💎 **${item}** (Halaman: ${page}, Slot: ${slot})\n`;
+                });
+
+                const resultEmbed = new EmbedBuilder()
+                 .setTitle('🏆 League Prize Personal')
+                 .setColor('#FFD700')
+                 .setDescription(descriptionText)
+                 .setFooter({ text: `Total item dimenangkan: ${results.length}` });
+
+                return interaction.editReply({ embeds: new Array(resultEmbed) });
+            } catch (error) {
+                console.log("CEKPRIZE ERROR:", error);
+                return interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
+            }
+        }
+
+        // ==========================================
+        // COMMAND: /CEKPRIZEALL (League Prize - All)
+        // ==========================================
+        if (interaction.commandName === 'cekprizeall') {
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+                const key = process.env.GOOGLE_PRIVATE_KEY;
+                const sheetId = process.env.GOOGLE_SHEET_ID;
+
+                let isConfigured = false;
+                if (email && key && sheetId) isConfigured = true;
+
+                if (!isConfigured) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
+
+                const serviceAccountAuth = new JWT({
+                    email: email,
+                    key: key.replace(/\\n/g, '\n'),
+                    scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
+                });
+                const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
+                await doc.loadInfo();
+                
+                const sheet = doc.sheetsByIndex.at(2);
+                if (!sheet) return interaction.editReply({ content: '❌ Tab Sheet ke-3 (League Prize) tidak ditemukan!' });
                 
                 const rows = await sheet.getRows();
 
-                if (rows.length === 0) {
-                    return interaction.editReply({ content: '❌ Data di Google Sheets (Tab 3) masih kosong.' });
-                }
+                if (rows.length === 0) return interaction.editReply({ content: '❌ Data di Google Sheets (Tab 3) masih kosong.' });
 
                 const allItems = new Array();
                 rows.forEach(res => {
-                    // Ekstraksi data secara dinamis berdasarkan gambar Excel kamu
-                    let page = res.get('Halaman');
-                    if (!page) { if (res._rawData) page = res._rawData.at(0); }
-                    if (!page) page = '-';
-
-                    let slot = res.get('Slot');
-                    if (!slot) { if (res._rawData) slot = res._rawData.at(1); }
-                    if (!slot) slot = '-';
+                    let page = res.get('Halaman')? res.get('Halaman') : (res._rawData? res._rawData.at(0) : '-');
+                    let slot = res.get('Slot')? res.get('Slot') : (res._rawData? res._rawData.at(1) : '-');
+                    let item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : (res._rawData? res._rawData.at(2) : 'Item');
+                    let bidder = res.get('Player yang Bid')? res.get('Player yang Bid') : (res._rawData? res._rawData.at(3) : '-');
                     
-                    let item = res.get('Nama Item (Otomatis)');
-                    if (!item) { if (res._rawData) item = res._rawData.at(2); }
-                    if (!item) item = 'Item';
-
-                    let bidderOrPrice = res.get('Player yang Bid');
-                    if (!bidderOrPrice) { if (res._rawData) bidderOrPrice = res._rawData.at(3); }
-                    if (!bidderOrPrice) bidderOrPrice = '-';
-                    
-                    allItems.push(`Hal: **${page}** | Slot: **${slot}** | 💎 **${item}** — 👤 ${bidderOrPrice}`);
+                    allItems.push(`Hal: **${page}** | Slot: **${slot}** | 💎 **${item}** — 👤 ${bidder}`);
                 });
 
-                // Pecah data menjadi beberapa halaman (15 data per halaman)
                 const pages = new Array();
                 const itemsPerPage = 15;
                 for (let i = 0; i < allItems.length; i += itemsPerPage) {
@@ -176,34 +217,33 @@ client.on('interactionCreate', async (interaction) => {
                     pages.push(chunk.join('\n'));
                 }
 
-                // Simpan halaman ke memori
                 const pageId = Date.now().toString();
                 paginationData[pageId] = {
                     pages: pages,
                     currentPage: 0,
                     userId: interaction.user.id,
                     totalItems: allItems.length,
-                    title: '💰 Informasi Harga Bid League',
+                    title: '🏆 Seluruh Informasi League Prize',
                     color: '#FFD700'
                 };
 
-                const resultEmbed = new EmbedBuilder()
-                 .setTitle(paginationData[pageId].title)
-                 .setColor(paginationData[pageId].color)
-                 .setDescription(pages.at(0))
-                 .setFooter({ text: `Halaman 1 dari ${pages.length} | Total Data: ${allItems.length}` });
+                const embed = new EmbedBuilder()
+                .setTitle(paginationData[pageId].title)
+                .setColor(paginationData[pageId].color)
+                .setDescription(pages.at(0))
+                .setFooter({ text: `Halaman 1 dari ${pages.length} | Total Data: ${allItems.length}` });
 
                 const buttons = generatePaginationButtons(pageId, 0, pages.length);
 
-                return interaction.editReply({ embeds: new Array(resultEmbed), components: new Array(buttons) });
+                return interaction.editReply({ embeds: new Array(embed), components: new Array(buttons) });
             } catch (error) {
-                console.log("BIDLEAGUEPRICE ERROR:", error);
+                console.log("CEKPRIZEALL ERROR:", error);
                 return interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
             }
         }
         
         // ==========================================
-        // COMMAND: /CEKBIDALL
+        // COMMAND: /CEKBIDALL (GL Omni - All)
         // ==========================================
         if (interaction.commandName === 'cekbidall') {
             await interaction.deferReply({ ephemeral: true });
@@ -214,17 +254,9 @@ client.on('interactionCreate', async (interaction) => {
                 const sheetId = process.env.GOOGLE_SHEET_ID;
 
                 let isConfigured = false;
-                if (email) {
-                    if (key) {
-                        if (sheetId) {
-                            isConfigured = true;
-                        }
-                    }
-                }
+                if (email && key && sheetId) isConfigured = true;
 
-                if (!isConfigured) {
-                    return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
-                }
+                if (!isConfigured) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
 
                 const serviceAccountAuth = new JWT({
                     email: email,
@@ -234,24 +266,17 @@ client.on('interactionCreate', async (interaction) => {
                 const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
                 await doc.loadInfo();
                 
-                // MENGAMBIL TAB KE-2 ("GL Omni Ruler" berada di Indeks 1)
                 const sheet = doc.sheetsByIndex.at(1);
                 const rows = await sheet.getRows();
 
-                if (rows.length === 0) {
-                    return interaction.editReply({ content: '❌ Data bid di Google Sheets masih kosong.' });
-                }
+                if (rows.length === 0) return interaction.editReply({ content: '❌ Data bid di Google Sheets masih kosong.' });
 
                 const allItems = new Array();
                 rows.forEach(res => {
-                    let player = res.get('Player yang Bid');
-                    if (!player) player = '-';
-                    let item = res.get('Nama Item (Otomatis)');
-                    if (!item) item = 'Item';
-                    let page = res.get('Halaman');
-                    if (!page) page = '-';
-                    let slot = res.get('Slot');
-                    if (!slot) slot = '-';
+                    let player = res.get('Player yang Bid')? res.get('Player yang Bid') : '-';
+                    let item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : 'Item';
+                    let page = res.get('Halaman')? res.get('Halaman') : '-';
+                    let slot = res.get('Slot')? res.get('Slot') : '-';
                     
                     allItems.push(`Hal: **${page}** | Slot: **${slot}** | 📦 **${item}** — 👤 ${player}`);
                 });
@@ -288,7 +313,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         // ==========================================
-        // COMMAND: /CEKBID (Personal)
+        // COMMAND: /CEKBID (GL Omni - Personal)
         // ==========================================
         if (interaction.commandName === 'cekbid') {
             await interaction.deferReply({ ephemeral: true });
@@ -299,17 +324,9 @@ client.on('interactionCreate', async (interaction) => {
                 const sheetId = process.env.GOOGLE_SHEET_ID;
 
                 let isConfigured = false;
-                if (email) {
-                    if (key) {
-                        if (sheetId) {
-                            isConfigured = true;
-                        }
-                    }
-                }
+                if (email && key && sheetId) isConfigured = true;
 
-                if (!isConfigured) {
-                    return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
-                }
+                if (!isConfigured) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
 
                 const serviceAccountAuth = new JWT({
                     email: email,
@@ -318,16 +335,13 @@ client.on('interactionCreate', async (interaction) => {
                 });
                 const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
                 await doc.loadInfo();
-                
                 const sheet = doc.sheetsByIndex.at(1);
                 const rows = await sheet.getRows();
                 const userName = interaction.member.displayName.toLowerCase();
 
                 const results = rows.filter(row => {
                     const player = row.get('Player yang Bid');
-                    if (player) {
-                        return player.toLowerCase() === userName;
-                    }
+                    if (player) return player.toLowerCase() === userName;
                     return false;
                 });
 
@@ -337,20 +351,17 @@ client.on('interactionCreate', async (interaction) => {
 
                 let descriptionText = `Halo **${interaction.member.displayName}**, ini adalah daftar bid yang kamu menangkan:\n\n`;
                 results.forEach(res => {
-                    let item = 'Item';
-                    if (res.get('Nama Item (Otomatis)')) item = res.get('Nama Item (Otomatis)');
-                    let page = '-';
-                    if (res.get('Halaman')) page = res.get('Halaman');
-                    let slot = '-';
-                    if (res.get('Slot')) slot = res.get('Slot');
+                    let item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : 'Item';
+                    let page = res.get('Halaman')? res.get('Halaman') : '-';
+                    let slot = res.get('Slot')? res.get('Slot') : '-';
                     descriptionText += `📦 **${item}** (Halaman: ${page}, Slot: ${slot})\n`;
                 });
 
                 const resultEmbed = new EmbedBuilder()
-          .setTitle('📋 Informasi Bid Listing')
-          .setColor('#2ECC71')
-          .setDescription(descriptionText)
-          .setFooter({ text: `Total item dimenangkan: ${results.length}` });
+           .setTitle('📋 Informasi Bid Listing')
+           .setColor('#2ECC71')
+           .setDescription(descriptionText)
+           .setFooter({ text: `Total item dimenangkan: ${results.length}` });
 
                 return interaction.editReply({ embeds: new Array(resultEmbed) });
             } catch (error) {
@@ -380,13 +391,7 @@ client.on('interactionCreate', async (interaction) => {
                 const sheetId = process.env.GOOGLE_SHEET_ID;
 
                 let isConfigured = false;
-                if (email) {
-                    if (key) {
-                        if (sheetId) {
-                            isConfigured = true;
-                        }
-                    }
-                }
+                if (email && key && sheetId) isConfigured = true;
 
                 if (isConfigured) {
                     const serviceAccountAuth = new JWT({
@@ -404,13 +409,10 @@ client.on('interactionCreate', async (interaction) => {
                     if (rows.length > 0) {
                         for (let i = 0; i < rows.length; i++) {
                             let rowId = parseInt(String(rows.at(i).get('EventID')).replace("'", ""));
-                            if (rowId > lastId) {
-                                lastId = rowId;
-                            }
+                            if (rowId > lastId) lastId = rowId;
                         }
                     }
-                    let nextIdNum = lastId + 1;
-                    eventId = nextIdNum.toString();
+                    eventId = (lastId + 1).toString();
                 }
             } catch (error) {
                 eventId = Date.now().toString(); 
@@ -521,7 +523,7 @@ async function processClick(interaction, isButton) {
             eventId = parts.at(2);
         }
 
-        // --- SISTEM PAGINATION GLOBAL ---
+        // --- PAGINATION GLOBAL ---
         if (action === 'page') {
             let direction = choice; 
             let pageId = eventId; 
@@ -543,10 +545,10 @@ async function processClick(interaction, isButton) {
             }
 
             const embed = new EmbedBuilder()
-             .setTitle(pageData.title)
-             .setColor(pageData.color)
-             .setDescription(pageData.pages.at(pageData.currentPage))
-             .setFooter({ text: `Halaman ${pageData.currentPage + 1} dari ${pageData.pages.length} | Total Data: ${pageData.totalItems}` });
+            .setTitle(pageData.title)
+            .setColor(pageData.color)
+            .setDescription(pageData.pages.at(pageData.currentPage))
+            .setFooter({ text: `Halaman ${pageData.currentPage + 1} dari ${pageData.pages.length} | Total Data: ${pageData.totalItems}` });
 
             const buttons = generatePaginationButtons(pageId, pageData.currentPage, pageData.pages.length);
 
@@ -702,9 +704,9 @@ function generateDynamicEmbed(eventId, event, description, timeLine) {
     let roleTotal = 0;
 
     const newEmbed = new EmbedBuilder()
-    .setTitle(event.title)
-    .setColor('#F1C40F')
-    .setDescription(description);
+   .setTitle(event.title)
+   .setColor('#F1C40F')
+   .setDescription(description);
 
     JOBS.forEach(job => {
         if (event.limits[job.id] > 0) {
@@ -736,10 +738,10 @@ function generateDynamicComponents(eventId, event) {
         if (event.limits[job.id] > 0) {
             buttonBuffer.push(
                 new ButtonBuilder()
-                .setCustomId(`role_${job.id}_${eventId}`)
-                .setLabel(job.label)
-                .setEmoji(job.customId)
-                .setStyle(ButtonStyle.Secondary)
+               .setCustomId(`role_${job.id}_${eventId}`)
+               .setLabel(job.label)
+               .setEmoji(job.customId)
+               .setStyle(ButtonStyle.Secondary)
             );
         }
     });
@@ -751,9 +753,9 @@ function generateDynamicComponents(eventId, event) {
 
     allRows.push(new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-        .setCustomId(`status_${eventId}`)
-        .setPlaceholder('Select a status')
-        .addOptions(
+       .setCustomId(`status_${eventId}`)
+       .setPlaceholder('Select a status')
+       .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
@@ -782,15 +784,15 @@ function generatePaginationButtons(pageId, currentPage, totalPages) {
 
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-        .setCustomId(`page_prev_${pageId}`)
-        .setLabel('◀ Previous')
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(prevDisabled),
+       .setCustomId(`page_prev_${pageId}`)
+       .setLabel('◀ Previous')
+       .setStyle(ButtonStyle.Primary)
+       .setDisabled(prevDisabled),
         new ButtonBuilder()
-        .setCustomId(`page_next_${pageId}`)
-        .setLabel('Next ▶')
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(nextDisabled)
+       .setCustomId(`page_next_${pageId}`)
+       .setLabel('Next ▶')
+       .setStyle(ButtonStyle.Primary)
+       .setDisabled(nextDisabled)
     );
 
     return row;
@@ -802,17 +804,8 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
     const sheetId = process.env.GOOGLE_SHEET_ID;
 
     let isConfigured = false;
-    if (email) {
-        if (key) {
-            if (sheetId) {
-                isConfigured = true;
-            }
-        }
-    }
-    
-    if (!isConfigured) {
-        return;
-    }
+    if (email && key && sheetId) isConfigured = true;
+    if (!isConfigured) return;
 
     try {
         const serviceAccountAuth = new JWT({
@@ -823,8 +816,6 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
         
         const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
         await doc.loadInfo();
-        
-        // MENGAMBIL TAB KE-1 (Indeks 0) UNTUK DATA ABSEN
         const sheet = doc.sheetsByIndex.at(0); 
         
         const rows = await sheet.getRows();
@@ -834,17 +825,13 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
         for (let i = 0; i < rows.length; i++) {
             let rowId = String(rows.at(i).get('EventID')).replace("'", "");
             let rowUser = rows.at(i).get('User');
-            if (rowId === safeEventId) {
-                if (rowUser === username) {
-                    existingRow = rows.at(i);
-                }
+            if (rowId === safeEventId && rowUser === username) {
+                existingRow = rows.at(i);
             }
         }
 
         if (existingRow) {
-            if (role) {
-                existingRow.set('Role', role);
-            }
+            if (role) existingRow.set('Role', role);
             if (note) {
                 if (note === 'RemoveLate') {
                     existingRow.set('Note', ''); 
@@ -857,16 +844,8 @@ async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
             await existingRow.save(); 
         } else {
             let initialNote = '';
-            if (note) {
-                if (note!== 'RemoveLate') {
-                    initialNote = note;
-                }
-            }
-            
-            let initialRole = '';
-            if (role) {
-                initialRole = role;
-            }
+            if (note && note!== 'RemoveLate') initialNote = note;
+            let initialRole = role? role : '';
 
             await sheet.addRow({ 
                 EventID: eventId, 
