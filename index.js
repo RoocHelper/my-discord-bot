@@ -7,622 +7,629 @@ const chrono = require('chrono-node');
 const app = express();
 app.get('/', (req, res) => res.send('My bot is awake!'));
 
-let port = process.env.PORT;
-if (!port) {
-    port = 3000;
-}
+let port = process.env.PORT || 3000;
 app.listen(port, () => console.log('Web server started'));
 
+// PENTING: Tambahkan GatewayIntentBits.GuildMembers
+// Pastikan "Server Members Intent" dinyalakan di Discord Developer Portal
 const client = new Client({
-    intents: new Array(
+    intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    )
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers 
+    ]
 });
 
 const raidData = {};
-const paginationData = {}; 
-
-// --- KONFIGURASI 13 PROFESI ---
-const JOBS = new Array(
-    { id: 'LK', label: 'LK', customId: '⚔️', emoji: '⚔️' },
-    { id: 'BardDancer', label: 'Bard/Dancer', customId: '1498698562010353704', emoji: '<:DancerBard:1498698562010353704>' },
-    { id: 'Sniper', label: 'Sniper', customId: '1498698005539459122', emoji: '<:Sniper:1498698005539459122>' },
-    { id: 'BioChemist', label: 'Bio Chemist', customId: '1498698315254988891', emoji: '<:Bio:1498698315254988891>' },
-    { id: 'Mastersmith', label: 'Mastersmith', customId: '🔨', emoji: '🔨' },
-    { id: 'Assassin', label: 'Assassin', customId: '🗡️', emoji: '🗡️' },
-    { id: 'Professor', label: 'Professor', customId: '📚', emoji: '📚' },
-    { id: 'HighWizard', label: 'High Wizard', customId: '🔮', emoji: '🔮' },
-    { id: 'Champion', label: 'Champion', customId: '🥊', emoji: '🥊' },
-    { id: 'HighPriest', label: 'High Priest', customId: '1498698148065841294', emoji: '<:Priest:1498698148065841294>' },
-    { id: 'Paladin', label: 'Paladin', customId: '1498698119913672736', emoji: '<:Paladin:1498698119913672736>' },
-    { id: 'DoramPhys', label: 'Doram Phys', customId: '🐱', emoji: '🐱' },
-    { id: 'DoramMagic', label: 'Doram Magic', customId: '🪄', emoji: '🪄' }
-);
-
-function safeGetInteger(interaction, name) {
-    let value = interaction.options.getInteger(name);
-    if (value === null) {
-        return 0;
-    }
-    return value;
-}
+const absenData = {};
 
 client.once('ready', async () => {
     console.log(`Success! Logged in as ${client.user.tag}`);
     
-    await client.application.commands.set(new Array(
+    await client.application.commands.set([
         {
-            name: 'cekbid',
-            description: 'Cek daftar kemenangan bid personal di tab GL Omni Ruler!'
-        },
-        {
-            name: 'cekbidall',
-            description: 'Tampilkan seluruh bid list di tab GL Omni Ruler menggunakan halaman!'
-        },
-        {
-            name: 'cekprize',
-            description: 'Cek daftar kemenangan bid personal di tab League Prize!'
-        },
-        {
-            name: 'cekprizeall',
-            description: 'Tampilkan seluruh bid list di tab League Prize menggunakan halaman!'
+            name: 'raid',
+            description: 'Create a Raid-Helper style event!',
+            options: [
+                { name: 'title', description: 'What is the name of the raid?', type: 3, required: true },
+                { name: 'date', description: 'When? (e.g., tomorrow at 9pm, next friday)', type: 3, required: true }
+            ]
         },
         {
             name: 'editraid',
-            description: 'Edit the time of an existing event',
-            options: new Array(
-                { name: 'event_id', description: 'The ID at the bottom of the box', type: 3, required: true },
+            description: 'Edit the time of an existing raid',
+            options: [
+                { name: 'event_id', description: 'The ID at the bottom of the raid box', type: 3, required: true },
                 { name: 'new_date', description: 'The new time (e.g., in 2 hours)', type: 3, required: true }
-            )
+            ]
         },
         {
             name: 'absen',
-            description: 'Buat form absensi (Isi kuota max per class, kosongkan jika tidak dipakai)',
-            options: new Array(
-                { name: 'title', description: 'Judul absen?', type: 3, required: true },
-                { name: 'date', description: 'Kapan? (e.g., tomorrow at 9pm)', type: 3, required: true },
-                { name: 'lk', description: 'Max Lord Knight (Otomatis 0)', type: 4, required: false },
-                { name: 'bard_dancer', description: 'Max Bard/Dancer (Otomatis 0)', type: 4, required: false },
-                { name: 'sniper', description: 'Max Sniper (Otomatis 0)', type: 4, required: false },
-                { name: 'bio_chemist', description: 'Max Bio Chemist (Otomatis 0)', type: 4, required: false },
-                { name: 'mastersmith', description: 'Max Mastersmith (Otomatis 0)', type: 4, required: false },
-                { name: 'assassin', description: 'Max Assassin (Otomatis 0)', type: 4, required: false },
-                { name: 'professor', description: 'Max Professor (Otomatis 0)', type: 4, required: false },
-                { name: 'high_wizard', description: 'Max High Wizard (Otomatis 0)', type: 4, required: false },
-                { name: 'champion', description: 'Max Champion (Otomatis 0)', type: 4, required: false },
-                { name: 'high_priest', description: 'Max High Priest (Otomatis 0)', type: 4, required: false },
-                { name: 'paladin', description: 'Max Paladin (Otomatis 0)', type: 4, required: false },
-                { name: 'doram_phys', description: 'Max Doram Phys (Otomatis 0)', type: 4, required: false },
-                { name: 'doram_magic', description: 'Max Doram Magic (Otomatis 0)', type: 4, required: false }
-            )
+            description: 'Buat list absen custom untuk class',
+            options: [
+                { name: 'title', description: 'Judul absen', type: 3, required: true },
+                { name: 'lk', description: 'Jumlah max LK (0 jika tidak ada)', type: 4, required: true },
+                { name: 'bard_dancer', description: 'Jumlah max Bard/Dancer (0 jika tidak ada)', type: 4, required: true },
+                { name: 'sniper', description: 'Jumlah max Sniper (0 jika tidak ada)', type: 4, required: true },
+                { name: 'bio', description: 'Jumlah max Bio Chemist (0 jika tidak ada)', type: 4, required: true },
+                { name: 'ms', description: 'Jumlah max Mastersmith (0 jika tidak ada)', type: 4, required: true },
+                { name: 'assasin', description: 'Jumlah max Assasin (0 jika tidak ada)', type: 4, required: true },
+                { name: 'prof', description: 'Jumlah max Professor (0 jika tidak ada)', type: 4, required: true },
+                { name: 'hw', description: 'Jumlah max High Wizard (0 jika tidak ada)', type: 4, required: true },
+                { name: 'champ', description: 'Jumlah max Champion (0 jika tidak ada)', type: 4, required: true },
+                { name: 'hp', description: 'Jumlah max High Priest (0 jika tidak ada)', type: 4, required: true },
+                { name: 'paladin', description: 'Jumlah max Paladin (0 jika tidak ada)', type: 4, required: true },
+                { name: 'doram_phys', description: 'Jumlah max Doram Phys (0 jika tidak ada)', type: 4, required: true },
+                { name: 'doram_magic', description: 'Jumlah max Doram Magic (0 jika tidak ada)', type: 4, required: true }
+            ]
+        },
+        {
+            name: 'cekbid',
+            description: 'Cek jadwal dan barang apa saja yang kamu bid dari Google Sheets'
+        },
+        {
+            name: 'cekbidall',
+            description: 'Cek seluruh list bid dari Google Sheets (Hanya terlihat olehmu)'
+        },
+        {
+            name: 'cekleague',
+            description: 'Cek barang apa saja yang kamu dapat dari League Prize'
+        },
+        {
+            name: 'cekleagueall',
+            description: 'Cek seluruh list League Prize (Hanya terlihat olehmu)'
+        },
+        {
+            name: 'notifybid',
+            description: '[ADMIN ONLY] Kirim DM peringatan ke semua member di list Bid Utama',
+            default_member_permissions: String(PermissionFlagsBits.Administrator)
+        },
+        {
+            name: 'notifyleague',
+            description: '[ADMIN ONLY] Kirim DM peringatan ke semua member di list League Prize',
+            default_member_permissions: String(PermissionFlagsBits.Administrator)
         }
-    ));
+    ]);
     console.log('Commands created!');
 });
 
-client.on('interactionCreate', async (interaction) => {
-    
-    if (interaction.isChatInputCommand()) {
+async function accessSpreadsheet(sheetIndex) {
+    const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+    const key = process.env.GOOGLE_PRIVATE_KEY;
+    const sheetId = process.env.GOOGLE_SHEET_ID;
 
-        // ==========================================
-        // COMMAND: /CEKPRIZE (League Prize - Personal)
-        // ==========================================
-        if (interaction.commandName === 'cekprize') {
-            await interaction.deferReply({ ephemeral: true });
+    if (!email || !key || !sheetId) {
+        throw new Error('Google Credentials belum disetting di Environment Variables.');
+    }
 
-            try {
-                const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-                const key = process.env.GOOGLE_PRIVATE_KEY;
-                const sheetId = process.env.GOOGLE_SHEET_ID;
+    const serviceAccountAuth = new JWT({
+        email: email,
+        key: key.replace(/\\n/g, '\n'),
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
 
-                let isConfigured = false;
-                if (email && key && sheetId) isConfigured = true;
+    const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
+    await doc.loadInfo();
+    return doc.sheetsByIndex[sheetIndex];
+}
 
-                if (!isConfigured) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
+// Fungsi Delay untuk mencegah rate limit DM
+const delay = ms => new Promise(res => setTimeout(res, ms));
 
-                const serviceAccountAuth = new JWT({
-                    email: email,
-                    key: key.replace(/\\n/g, '\n'),
-                    scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
-                });
-                const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
-                await doc.loadInfo();
-                
-                // Mengambil Tab ke-3 ("League Prize" berada di Indeks 2)
-                const sheet = doc.sheetsByIndex.at(2);
-                if (!sheet) return interaction.editReply({ content: '❌ Tab Sheet ke-3 (League Prize) tidak ditemukan!' });
-                
-                const rows = await sheet.getRows();
-                const userName = interaction.member.displayName.toLowerCase();
+async function sendMassDM(interaction, sheetIndex, listName) {
+    await interaction.deferReply({ ephemeral: true });
 
-                const results = rows.filter(row => {
-                    let player = row.get('Player yang Bid');
-                    if (!player) { if (row._rawData) player = row._rawData.at(3); }
-                    if (player) return player.toLowerCase() === userName;
-                    return false;
-                });
+    try {
+        const sheet = await accessSpreadsheet(sheetIndex);
+        const rows = await sheet.getRows();
 
-                if (results.length === 0) {
-                    return interaction.editReply({ content: `❌ Halo **${interaction.member.displayName}**, nama kamu **tidak ada** di bid League Prize saat ini.` });
-                }
-
-                let descriptionText = `Halo **${interaction.member.displayName}**, ini adalah daftar kemenangan League Prize kamu:\n\n`;
-                results.forEach(res => {
-                    let page = res.get('Halaman')? res.get('Halaman') : (res._rawData? res._rawData.at(0) : '-');
-                    let slot = res.get('Slot')? res.get('Slot') : (res._rawData? res._rawData.at(1) : '-');
-                    let item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : (res._rawData? res._rawData.at(2) : 'Item');
-                    descriptionText += `💎 **${item}** (Halaman: ${page}, Slot: ${slot})\n`;
-                });
-
-                const resultEmbed = new EmbedBuilder()
-                 .setTitle('🏆 League Prize Personal')
-                 .setColor('#FFD700')
-                 .setDescription(descriptionText)
-                 .setFooter({ text: `Total item dimenangkan: ${results.length}` });
-
-                return interaction.editReply({ embeds: new Array(resultEmbed) });
-            } catch (error) {
-                console.log("CEKPRIZE ERROR:", error);
-                return interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
-            }
+        if (rows.length === 0) {
+            return interaction.editReply({ content: `❌ Sheet ${listName} kosong.` });
         }
 
-        // ==========================================
-        // COMMAND: /CEKPRIZEALL (League Prize - All)
-        // ==========================================
-        if (interaction.commandName === 'cekprizeall') {
-            await interaction.deferReply({ ephemeral: true });
+        // Kelompokkan data berdasarkan player
+        const playerBids = {};
+        rows.forEach(row => {
+            const playerRaw = row.get('Player yang Bid') || row.get('Player Yang Bid');
+            if (!playerRaw) return;
+            
+            const player = playerRaw.toString().trim();
+            if (player === '-' || player === '') return;
 
-            try {
-                const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-                const key = process.env.GOOGLE_PRIVATE_KEY;
-                const sheetId = process.env.GOOGLE_SHEET_ID;
+            const playerNameLowerCase = player.toLowerCase();
+            const halaman = row.get('Halaman') || row.get('Hal');
+            const item = row.get('Nama Item (Otomatis)') || row.get('Nama Barang');
 
-                let isConfigured = false;
-                if (email && key && sheetId) isConfigured = true;
-
-                if (!isConfigured) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
-
-                const serviceAccountAuth = new JWT({
-                    email: email,
-                    key: key.replace(/\\n/g, '\n'),
-                    scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
-                });
-                const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
-                await doc.loadInfo();
-                
-                const sheet = doc.sheetsByIndex.at(2);
-                if (!sheet) return interaction.editReply({ content: '❌ Tab Sheet ke-3 (League Prize) tidak ditemukan!' });
-                
-                const rows = await sheet.getRows();
-
-                if (rows.length === 0) return interaction.editReply({ content: '❌ Data di Google Sheets (Tab 3) masih kosong.' });
-
-                const allItems = new Array();
-                rows.forEach(res => {
-                    let page = res.get('Halaman')? res.get('Halaman') : (res._rawData? res._rawData.at(0) : '-');
-                    let slot = res.get('Slot')? res.get('Slot') : (res._rawData? res._rawData.at(1) : '-');
-                    let item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : (res._rawData? res._rawData.at(2) : 'Item');
-                    let bidder = res.get('Player yang Bid')? res.get('Player yang Bid') : (res._rawData? res._rawData.at(3) : '-');
-                    
-                    allItems.push(`Hal: **${page}** | Slot: **${slot}** | 💎 **${item}** — 👤 ${bidder}`);
-                });
-
-                const pages = new Array();
-                const itemsPerPage = 15;
-                for (let i = 0; i < allItems.length; i += itemsPerPage) {
-                    let chunk = allItems.slice(i, i + itemsPerPage);
-                    pages.push(chunk.join('\n'));
-                }
-
-                const pageId = Date.now().toString();
-                paginationData[pageId] = {
-                    pages: pages,
-                    currentPage: 0,
-                    userId: interaction.user.id,
-                    totalItems: allItems.length,
-                    title: '🏆 Seluruh Informasi League Prize',
-                    color: '#FFD700'
+            if (!playerBids[playerNameLowerCase]) {
+                playerBids[playerNameLowerCase] = {
+                    originalName: player,
+                    items: []
                 };
-
-                const embed = new EmbedBuilder()
-                .setTitle(paginationData[pageId].title)
-                .setColor(paginationData[pageId].color)
-                .setDescription(pages.at(0))
-                .setFooter({ text: `Halaman 1 dari ${pages.length} | Total Data: ${allItems.length}` });
-
-                const buttons = generatePaginationButtons(pageId, 0, pages.length);
-
-                return interaction.editReply({ embeds: new Array(embed), components: new Array(buttons) });
-            } catch (error) {
-                console.log("CEKPRIZEALL ERROR:", error);
-                return interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
             }
-        }
+            playerBids[playerNameLowerCase].items.push(`• **${item}** (Halaman ${halaman})`);
+        });
+
+        // Ambil SEMUA member di server (Butuh Server Members Intent nyala!)
+        const guildMembers = await interaction.guild.members.fetch();
         
-        // ==========================================
-        // COMMAND: /CEKBIDALL (GL Omni - All)
-        // ==========================================
-        if (interaction.commandName === 'cekbidall') {
+        let successCount = 0;
+        let failCount = 0;
+        let failNames = [];
+
+        await interaction.editReply({ content: `⏳ Sedang memproses DM untuk daftar **${listName}**... Tolong jangan gunakan command ini lagi sampai selesai agar bot tidak error. Proses ini membutuhkan waktu sekitar ${Object.keys(playerBids).length * 2} detik.` });
+
+        for (const [playerNameLowerCase, data] of Object.entries(playerBids)) {
+            // Cari member yang cocok namanya (Username, Nickname Server, atau Global Name)
+            const targetMember = guildMembers.find(m => 
+                m.user.username.toLowerCase() === playerNameLowerCase ||
+                (m.displayName && m.displayName.toLowerCase() === playerNameLowerCase) ||
+                (m.user.globalName && m.user.globalName.toLowerCase() === playerNameLowerCase)
+            );
+
+            if (targetMember) {
+                try {
+                    const dmEmbed = new EmbedBuilder()
+                        .setTitle(`📢 Pemberitahuan ${listName}`)
+                        .setColor('#3498DB')
+                        .setDescription(`Halo **${data.originalName}**, kamu terdaftar untuk mengambil barang di **${listName}**!\n\nBerikut rinciannya:\n${data.items.join('\n')}`)
+                        .setFooter({ text: `Dikirim otomatis oleh bot dari list ${listName}` });
+
+                    await targetMember.send({ embeds: [dmEmbed] });
+                    successCount++;
+                } catch (dmError) {
+                    // Terjadi jika user menonaktifkan DM
+                    failCount++;
+                    failNames.push(`${data.originalName} (DM Tertutup)`);
+                }
+            } else {
+                // Terjadi jika nama di Excel tidak sama dengan di Discord
+                failCount++;
+                failNames.push(`${data.originalName} (Tidak ditemukan di server)`);
+            }
+
+            // Jeda 2 detik setiap pengiriman agar tidak di-banned spam oleh Discord
+            await delay(2000); 
+        }
+
+        let reportMessage = `✅ **Proses DM Massal Selesai!**\n\n`;
+        reportMessage += `Berhasil terkirim: **${successCount} member**\n`;
+        reportMessage += `Gagal terkirim: **${failCount} member**\n`;
+        
+        if (failNames.length > 0) {
+            reportMessage += `\n**Daftar Gagal:**\n${failNames.join('\n')}`;
+            if(reportMessage.length > 1900) {
+                reportMessage = reportMessage.substring(0, 1900) + '... (terpotong karena terlalu panjang)';
+            }
+        }
+
+        await interaction.editReply({ content: reportMessage });
+
+    } catch (error) {
+        console.error("Mass DM Error:", error);
+        await interaction.editReply({ content: `❌ Terjadi kesalahan saat mencoba memproses mass DM: ${error.message}` });
+    }
+}
+
+client.on('interactionCreate', async (interaction) => {
+    if (interaction.isChatInputCommand()) {
+        
+        // --- COMMAND ABSEN ---
+        if (interaction.commandName === 'absen') {
+            await interaction.deferReply();
+            
+            const eventId = "absen_" + Date.now().toString();
+            const title = interaction.options.getString('title');
+            
+            const limits = {
+                LK: interaction.options.getInteger('lk'),
+                BardDancer: interaction.options.getInteger('bard_dancer'),
+                Sniper: interaction.options.getInteger('sniper'),
+                Bio: interaction.options.getInteger('bio'),
+                MS: interaction.options.getInteger('ms'),
+                Assasin: interaction.options.getInteger('assasin'),
+                Prof: interaction.options.getInteger('prof'),
+                HW: interaction.options.getInteger('hw'),
+                Champ: interaction.options.getInteger('champ'),
+                HP: interaction.options.getInteger('hp'),
+                Paladin: interaction.options.getInteger('paladin'),
+                DoramPhys: interaction.options.getInteger('doram_phys'),
+                DoramMagic: interaction.options.getInteger('doram_magic')
+            };
+
+            absenData[eventId] = {
+                title: title,
+                limits: limits,
+                players: {
+                    LK: [], BardDancer: [], Sniper: [], Bio: [], MS: [], 
+                    Assasin: [], Prof: [], HW: [], Champ: [], HP: [], 
+                    Paladin: [], DoramPhys: [], DoramMagic: []
+                }
+            };
+
+            const embed = generateAbsenEmbed(eventId);
+            const componentsArray = generateAbsenComponents(eventId);
+
+            await interaction.editReply({ embeds: [embed], components: componentsArray });
+        }
+
+        // --- COMMAND NOTIFY BID (ADMIN ONLY) ---
+        if (interaction.commandName === 'notifybid') {
+            // Pengecekan admin ganda meskipun sudah di limit via command
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: "❌ Kamu tidak memiliki izin (Administrator) untuk menjalankan ini.", ephemeral: true });
+            }
+            await sendMassDM(interaction, 0, "Bid Utama");
+        }
+
+        // --- COMMAND NOTIFY LEAGUE (ADMIN ONLY) ---
+        if (interaction.commandName === 'notifyleague') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: "❌ Kamu tidak memiliki izin (Administrator) untuk menjalankan ini.", ephemeral: true });
+            }
+            // Sheet League Prize ada di Index 2
+            await sendMassDM(interaction, 2, "League Prize");
+        }
+
+        // --- COMMAND CEK BID ALL ---
+        if (interaction.commandName === 'cekbidall' || interaction.commandName === 'cekleagueall') {
             await interaction.deferReply({ ephemeral: true });
+            
+            let sheetIndex = interaction.commandName === 'cekbidall' ? 0 : 2;
+            let titleSource = interaction.commandName === 'cekbidall' ? "Bid List Utama" : "League Prize";
 
             try {
-                const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-                const key = process.env.GOOGLE_PRIVATE_KEY;
-                const sheetId = process.env.GOOGLE_SHEET_ID;
-
-                let isConfigured = false;
-                if (email && key && sheetId) isConfigured = true;
-
-                if (!isConfigured) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
-
-                const serviceAccountAuth = new JWT({
-                    email: email,
-                    key: key.replace(/\\n/g, '\n'),
-                    scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
-                });
-                const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
-                await doc.loadInfo();
-                
-                const sheet = doc.sheetsByIndex.at(1);
+                const sheet = await accessSpreadsheet(sheetIndex);
                 const rows = await sheet.getRows();
 
-                if (rows.length === 0) return interaction.editReply({ content: '❌ Data bid di Google Sheets masih kosong.' });
-
-                const allItems = new Array();
-                rows.forEach(res => {
-                    let player = res.get('Player yang Bid')? res.get('Player yang Bid') : '-';
-                    let item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : 'Item';
-                    let page = res.get('Halaman')? res.get('Halaman') : '-';
-                    let slot = res.get('Slot')? res.get('Slot') : '-';
-                    
-                    allItems.push(`Hal: **${page}** | Slot: **${slot}** | 📦 **${item}** — 👤 ${player}`);
-                });
-
-                const pages = new Array();
-                const itemsPerPage = 15;
-                for (let i = 0; i < allItems.length; i += itemsPerPage) {
-                    let chunk = allItems.slice(i, i + itemsPerPage);
-                    pages.push(chunk.join('\n'));
+                if (rows.length === 0) {
+                    return interaction.editReply({ content: `❌ Sheet ${titleSource} kosong.` });
                 }
 
-                const pageId = Date.now().toString();
-                paginationData[pageId] = {
-                    pages: pages,
-                    currentPage: 0,
-                    userId: interaction.user.id,
-                    totalItems: allItems.length,
-                    title: '📋 Seluruh Informasi Bid Listing',
-                    color: '#3498DB'
+                let allBids = [];
+                rows.forEach(row => {
+                    const player = row.get('Player yang Bid') || row.get('Player Yang Bid');
+                    const halaman = row.get('Halaman') || row.get('Hal');
+                    const item = row.get('Nama Item (Otomatis)') || row.get('Nama Barang');
+
+                    if (player && player !== '-' && player !== '') {
+                        allBids.push(`**${player}** - Halaman ${halaman}: ${item}`);
+                    }
+                });
+
+                if (allBids.length === 0) {
+                    return interaction.editReply({ content: `Belum ada data bid yang terisi di ${titleSource}.` });
+                }
+
+                let currentPage = 0;
+                const itemsPerPage = 15;
+                const totalPages = Math.ceil(allBids.length / itemsPerPage);
+
+                const getEmbed = (page) => {
+                    const start = page * itemsPerPage;
+                    const end = start + itemsPerPage;
+                    const pageData = allBids.slice(start, end);
+
+                    return new EmbedBuilder()
+                        .setTitle(`📋 Daftar Semua Orang (${titleSource})`)
+                        .setColor('#9B59B6')
+                        .setDescription(pageData.join('\n'))
+                        .setFooter({ text: `Halaman ${page + 1} dari ${totalPages} | Total ${allBids.length} Bid` });
                 };
 
-                const embed = new EmbedBuilder()
-               .setTitle(paginationData[pageId].title)
-               .setColor(paginationData[pageId].color)
-               .setDescription(pages.at(0))
-               .setFooter({ text: `Halaman 1 dari ${pages.length} | Total Data: ${allItems.length}` });
+                const getButtons = (page) => {
+                    return new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`prev_page_${interaction.commandName}`)
+                            .setLabel('⬅️ Prev')
+                            .setStyle(ButtonStyle.Primary)
+                            .setDisabled(page === 0),
+                        new ButtonBuilder()
+                            .setCustomId(`next_page_${interaction.commandName}`)
+                            .setLabel('Next ➡️')
+                            .setStyle(ButtonStyle.Primary)
+                            .setDisabled(page === totalPages - 1)
+                    );
+                };
 
-                const buttons = generatePaginationButtons(pageId, 0, pages.length);
-
-                return interaction.editReply({ embeds: new Array(embed), components: new Array(buttons) });
-            } catch (error) {
-                return interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
-            }
-        }
-
-        // ==========================================
-        // COMMAND: /CEKBID (GL Omni - Personal)
-        // ==========================================
-        if (interaction.commandName === 'cekbid') {
-            await interaction.deferReply({ ephemeral: true });
-
-            try {
-                const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-                const key = process.env.GOOGLE_PRIVATE_KEY;
-                const sheetId = process.env.GOOGLE_SHEET_ID;
-
-                let isConfigured = false;
-                if (email && key && sheetId) isConfigured = true;
-
-                if (!isConfigured) return interaction.editReply({ content: '❌ Konfigurasi Sheets belum lengkap.' });
-
-                const serviceAccountAuth = new JWT({
-                    email: email,
-                    key: key.replace(/\\n/g, '\n'),
-                    scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
-                });
-                const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
-                await doc.loadInfo();
-                const sheet = doc.sheetsByIndex.at(1);
-                const rows = await sheet.getRows();
-                const userName = interaction.member.displayName.toLowerCase();
-
-                const results = rows.filter(row => {
-                    const player = row.get('Player yang Bid');
-                    if (player) return player.toLowerCase() === userName;
-                    return false;
+                const message = await interaction.editReply({ 
+                    embeds: [getEmbed(currentPage)], 
+                    components: totalPages > 1 ? [getButtons(currentPage)] : []
                 });
 
-                if (results.length === 0) {
-                    return interaction.editReply({ content: `❌ Halo **${interaction.member.displayName}**, nama kamu **tidak ada** di bid listing saat ini.` });
+                if (totalPages > 1) {
+                    const collector = message.createMessageComponentCollector({ time: 600000 }); // 10 menit
+
+                    collector.on('collect', async (i) => {
+                        if (i.customId === `prev_page_${interaction.commandName}` && currentPage > 0) {
+                            currentPage--;
+                        } else if (i.customId === `next_page_${interaction.commandName}` && currentPage < totalPages - 1) {
+                            currentPage++;
+                        }
+                        
+                        await i.update({ 
+                            embeds: [getEmbed(currentPage)], 
+                            components: [getButtons(currentPage)] 
+                        });
+                    });
+
+                    collector.on('end', () => {
+                        interaction.editReply({ components: [] }).catch(console.error);
+                    });
                 }
 
-                let descriptionText = `Halo **${interaction.member.displayName}**, ini adalah daftar bid yang kamu menangkan:\n\n`;
-                results.forEach(res => {
-                    let item = res.get('Nama Item (Otomatis)')? res.get('Nama Item (Otomatis)') : 'Item';
-                    let page = res.get('Halaman')? res.get('Halaman') : '-';
-                    let slot = res.get('Slot')? res.get('Slot') : '-';
-                    descriptionText += `📦 **${item}** (Halaman: ${page}, Slot: ${slot})\n`;
-                });
-
-                const resultEmbed = new EmbedBuilder()
-           .setTitle('📋 Informasi Bid Listing')
-           .setColor('#2ECC71')
-           .setDescription(descriptionText)
-           .setFooter({ text: `Total item dimenangkan: ${results.length}` });
-
-                return interaction.editReply({ embeds: new Array(resultEmbed) });
             } catch (error) {
-                return interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
+                console.error("CekBidAll Error:", error);
+                await interaction.editReply({ content: `❌ Terjadi kesalahan: ${error.message}` });
             }
         }
 
-        // ==========================================
-        // COMMAND: /ABSEN
-        // ==========================================
-        if (interaction.commandName === 'absen') {
+        // --- COMMAND CEK BID DIRI SENDIRI ---
+        if (interaction.commandName === 'cekbid' || interaction.commandName === 'cekleague') {
             await interaction.deferReply(); 
 
-            let eventId = "1";
-            const customTitle = interaction.options.getString('title');
-            const customDateString = interaction.options.getString('date');
-            
-            const parsedDate = chrono.parseDate(customDateString);
-            if (!parsedDate) {
-                return interaction.editReply({ content: '❌ I could not understand that date format. Try "tomorrow at 9pm".' });
-            }
-            const unixTime = Math.floor(parsedDate.getTime() / 1000);
+            let sheetIndex = interaction.commandName === 'cekbid' ? 0 : 2;
+            let titleSource = interaction.commandName === 'cekbid' ? "Bid List" : "League Prize";
+
+            const username = interaction.member.displayName.toLowerCase();
+            const discordName = interaction.user.username.toLowerCase();
 
             try {
-                const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-                const key = process.env.GOOGLE_PRIVATE_KEY;
-                const sheetId = process.env.GOOGLE_SHEET_ID;
+                const sheet = await accessSpreadsheet(sheetIndex);
+                const rows = await sheet.getRows();
 
-                let isConfigured = false;
-                if (email && key && sheetId) isConfigured = true;
+                let foundBids = [];
 
-                if (isConfigured) {
-                    const serviceAccountAuth = new JWT({
-                        email: email,
-                        key: key.replace(/\\n/g, '\n'),
-                        scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
-                    });
-                    const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
-                    await doc.loadInfo();
+                rows.forEach(row => {
+                    const player = row.get('Player yang Bid') || row.get('Player Yang Bid');
+                    if (player) {
+                        const playerLowerCase = player.toString().toLowerCase();
+                        if (playerLowerCase === username || playerLowerCase === discordName) {
+                            const halaman = row.get('Halaman') || row.get('Hal');
+                            const item = row.get('Nama Item (Otomatis)') || row.get('Nama Barang');
+                            foundBids.push(`- **Halaman ${halaman}**: ${item}`);
+                        }
+                    }
+                });
+
+                if (foundBids.length > 0) {
+                    const embed = new EmbedBuilder()
+                        .setTitle(`📦 Data ${titleSource} untuk ${interaction.member.displayName}`)
+                        .setColor('#2ECC71')
+                        .setDescription(`Halo! Berikut adalah daftar item yang kamu dapatkan:\n\n${foundBids.join('\n')}`);
                     
-                    const sheet = doc.sheetsByIndex.at(0);
-                    const rows = await sheet.getRows();
+                    await interaction.editReply({ embeds: [embed] });
+                } else {
+                    await interaction.editReply({ content: `Halo ${interaction.member.displayName}, nama kamu tidak ada di ${titleSource} saat ini. Pastikan namamu di Discord sama dengan nama di tabel Google Sheets.` });
+                }
 
-                    let lastId = 0;
-                    if (rows.length > 0) {
-                        for (let i = 0; i < rows.length; i++) {
-                            let rowId = parseInt(String(rows.at(i).get('EventID')).replace("'", ""));
+            } catch (error) {
+                console.log("Google Sheets CekBid Error:", error);
+                await interaction.editReply({ content: `❌ Terjadi kesalahan saat membaca Google Sheets: ${error.message}` });
+            }
+        }
+
+        // --- (KODE LAMA RAID & EDIT RAID TETAP ADA DI SINI) ---
+        if (interaction.commandName === 'raid') {
+             await interaction.deferReply(); 
+
+             let eventId = "1";
+             const customTitle = interaction.options.getString('title');
+             const customDateString = interaction.options.getString('date');
+             
+             const parsedDate = chrono.parseDate(customDateString);
+             if (!parsedDate) {
+                 return interaction.editReply({ content: '❌ Format tanggal tidak dimengerti. Coba "tomorrow at 9pm".' });
+             }
+             const unixTime = Math.floor(parsedDate.getTime() / 1000);
+
+             try {
+                const sheet = await accessSpreadsheet(0);
+                const rows = await sheet.getRows();
+
+                let lastId = 0;
+                if (rows.length > 0) {
+                    for (let i = 0; i < rows.length; i++) {
+                        let val = rows.at(i).get('EventID');
+                        if (val) {
+                            let rowId = parseInt(String(val).replace("'", ""));
                             if (rowId > lastId) lastId = rowId;
                         }
                     }
-                    eventId = (lastId + 1).toString();
                 }
-            } catch (error) {
-                eventId = Date.now().toString(); 
-            }
+                let nextIdNum = lastId + 1;
+                eventId = nextIdNum.toString();
+             } catch (error) {
+                 console.log("Could not fetch ID, defaulting to timestamp.", error);
+                 eventId = Date.now().toString(); 
+             }
 
-            const limits = {
-                LK: safeGetInteger(interaction, 'lk'),
-                BardDancer: safeGetInteger(interaction, 'bard_dancer'),
-                Sniper: safeGetInteger(interaction, 'sniper'),
-                BioChemist: safeGetInteger(interaction, 'bio_chemist'),
-                Mastersmith: safeGetInteger(interaction, 'mastersmith'),
-                Assassin: safeGetInteger(interaction, 'assassin'),
-                Professor: safeGetInteger(interaction, 'professor'),
-                HighWizard: safeGetInteger(interaction, 'high_wizard'),
-                Champion: safeGetInteger(interaction, 'champion'),
-                HighPriest: safeGetInteger(interaction, 'high_priest'),
-                Paladin: safeGetInteger(interaction, 'paladin'),
-                DoramPhys: safeGetInteger(interaction, 'doram_phys'),
-                DoramMagic: safeGetInteger(interaction, 'doram_magic')
-            };
+             raidData[eventId] = {
+                 title: customTitle,
+                 time: unixTime,
+                 messageId: null,
+                 channelId: null,
+                 limits: { Sniper: 5, Priest: 2, Paladin: 1, DancerBard: 1, Bio: 1 },
+                 players: {
+                     Sniper: [], Priest: [], Paladin: [],
+                     DancerBard: [], Bio: [], Bench: [], Absent: []
+                 }
+             };
 
-            const event = {
-                title: customTitle,
-                time: unixTime,
-                limits: limits,
-                players: {
-                    LK: new Array(), BardDancer: new Array(), Sniper: new Array(), BioChemist: new Array(),
-                    Mastersmith: new Array(), Assassin: new Array(), Professor: new Array(), HighWizard: new Array(),
-                    Champion: new Array(), HighPriest: new Array(), Paladin: new Array(), DoramPhys: new Array(), 
-                    DoramMagic: new Array(), Bench: new Array(), Absent: new Array()
-                }
-            };
+             const embed = generateRaidEmbed(eventId);
+             const components = generateRaidComponents(eventId);
 
-            const timeDisplay = `<t:${unixTime}:d>`;
-            const exactTime = `<t:${unixTime}:t>`;
-            const relativeTime = `<t:${unixTime}:R>`;
-            const description = `**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`;
-            const timeLine = `Event start time • ${relativeTime}`;
-
-            const embed = generateDynamicEmbed(eventId, event, description, timeLine);
-            const components = generateDynamicComponents(eventId, event);
-
-            const reply = await interaction.editReply({ embeds: new Array(embed), components: components });
-            
-            raidData[eventId] = { messageId: reply.id, channelId: reply.channelId, time: unixTime };
+             const reply = await interaction.editReply({ embeds: [embed], components: components });
+             raidData[eventId].messageId = reply.id;
+             raidData[eventId].channelId = reply.channelId;
         }
 
-        // ==========================================
-        // COMMAND: /EDITRAID
-        // ==========================================
         if (interaction.commandName === 'editraid') {
-            const eventId = interaction.options.getString('event_id');
-            const newDateString = interaction.options.getString('new_date');
-            const eventMem = raidData[eventId];
+             const eventId = interaction.options.getString('event_id');
+             const newDateString = interaction.options.getString('new_date');
+             const event = raidData[eventId];
 
-            if (!eventMem) return interaction.reply({ content: '❌ Event not found or expired.', ephemeral: true });
+             if (!event) {
+                 return interaction.reply({ content: '❌ Event not found or expired.', ephemeral: true });
+             }
 
-            const parsedDate = chrono.parseDate(newDateString);
-            if (!parsedDate) return interaction.reply({ content: '❌ I could not understand that date format.', ephemeral: true });
-            
-            eventMem.time = Math.floor(parsedDate.getTime() / 1000);
+             const parsedDate = chrono.parseDate(newDateString);
+             if (!parsedDate) {
+                 return interaction.reply({ content: '❌ Format tanggal tidak dimengerti.', ephemeral: true });
+             }
 
-            const channel = await client.channels.fetch(eventMem.channelId);
-            const message = await channel.messages.fetch(eventMem.messageId);
-            
-            const receivedEmbed = message.embeds.at(0);
-            const timeDisplay = `<t:${eventMem.time}:d>`;
-            const exactTime = `<t:${eventMem.time}:t>`;
-            const relativeTime = `<t:${eventMem.time}:R>`;
-            const newDescription = `**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`;
-            const timeLine = `Event start time • ${relativeTime}`;
-            
-            const event = extractEventFromEmbed(receivedEmbed);
-            
-            const updatedEmbed = generateDynamicEmbed(eventId, event, newDescription, timeLine);
-            await message.edit({ embeds: new Array(updatedEmbed) });
-            return interaction.reply({ content: `✅ Event time successfully updated!`, ephemeral: true });
+             event.time = Math.floor(parsedDate.getTime() / 1000);
+
+             const channel = await client.channels.fetch(event.channelId);
+             const message = await channel.messages.fetch(event.messageId);
+             const updatedEmbed = generateRaidEmbed(eventId);
+             
+             await message.edit({ embeds: [updatedEmbed] });
+             return interaction.reply({ content: `✅ Waktu event berhasil diubah!`, ephemeral: true });
         }
     }
 
-    let isButton = interaction.isButton();
-    let isMenu = interaction.isStringSelectMenu();
-
-    if (isButton) {
-        await processClick(interaction, true);
-    } else if (isMenu) {
-        await processClick(interaction, false);
+    if (interaction.isButton()) {
+        if (interaction.customId.startsWith('prev_page_') || interaction.customId.startsWith('next_page_')) {
+            return; 
+        }
+        await processAbsenClick(interaction);
     }
 });
 
-// ==========================================
-// MAGIC CLICK HANDLER
-// ==========================================
-async function processClick(interaction, isButton) {
+function generateAbsenEmbed(eventId) {
+    const event = absenData[eventId];
+    const formatList = (list) => list.length > 0 ? list.join('\n') : '-';
+
+    const embed = new EmbedBuilder()
+        .setTitle(event.title)
+        .setColor('#E67E22')
+        .setDescription(`Silahkan klik tombol di bawah untuk absen class.`);
+
+    const fieldMap = [
+        { key: 'LK', emoji: '⚔️', name: 'Lord Knight' },
+        { key: 'Paladin', emoji: '🛡️', name: 'Paladin' },
+        { key: 'Assasin', emoji: '🗡️', name: 'Assasin' },
+        { key: 'Sniper', emoji: '🏹', name: 'Sniper' },
+        { key: 'BardDancer', emoji: '🎸', name: 'Bard/Dancer' },
+        { key: 'MS', emoji: '🔨', name: 'Mastersmith' },
+        { key: 'Bio', emoji: '🧪', name: 'Bio Chemist' },
+        { key: 'HW', emoji: '🧙', name: 'High Wizard' },
+        { key: 'Prof', emoji: '📖', name: 'Professor' },
+        { key: 'HP', emoji: '⛑️', name: 'High Priest' },
+        { key: 'Champ', emoji: '🥊', name: 'Champion' },
+        { key: 'DoramPhys', emoji: '🐱', name: 'Doram Phys' },
+        { key: 'DoramMagic', emoji: '😺', name: 'Doram Magic' }
+    ];
+
+    let totalSlot = 0;
+    fieldMap.forEach(job => {
+        if (event.limits[job.key] > 0) {
+            embed.addFields({ 
+                name: `${job.emoji} ${job.name} (${event.players[job.key].length}/${event.limits[job.key]})`, 
+                value: formatList(event.players[job.key]), 
+                inline: true 
+            });
+            totalSlot += event.limits[job.key];
+        }
+    });
+
+    let totalTerisi = 0;
+    for (const key in event.players) {
+        totalTerisi += event.players[key].length;
+    }
+
+    embed.setFooter({ text: `Total Absen: ${totalTerisi}/${totalSlot}` });
+    return embed;
+}
+
+function generateAbsenComponents(eventId) {
+    const event = absenData[eventId];
+    const componentsArray = [];
+    let currentRow = new ActionRowBuilder();
+    let buttonCount = 0;
+
+    const buttonConfigs = [
+        { id: 'LK', label: 'LK', emoji: '⚔️' },
+        { id: 'Paladin', label: 'Paladin', emoji: '🛡️' },
+        { id: 'Assasin', label: 'Assasin', emoji: '🗡️' },
+        { id: 'Sniper', label: 'Sniper', emoji: '🏹' },
+        { id: 'BardDancer', label: 'Bard/Dancer', emoji: '🎸' },
+        { id: 'MS', label: 'MS', emoji: '🔨' },
+        { id: 'Bio', label: 'Bio', emoji: '🧪' },
+        { id: 'HW', label: 'HW', emoji: '🧙' },
+        { id: 'Prof', label: 'Prof', emoji: '📖' },
+        { id: 'HP', label: 'HP', emoji: '⛑️' },
+        { id: 'Champ', label: 'Champ', emoji: '🥊' },
+        { id: 'DoramPhys', label: 'Doram P.', emoji: '🐱' },
+        { id: 'DoramMagic', label: 'Doram M.', emoji: '😺' }
+    ];
+
+    buttonConfigs.forEach(btn => {
+        if (event.limits[btn.id] > 0) {
+            currentRow.addComponents(
+                new ButtonBuilder().setCustomId(`absen_${btn.id}_${eventId}`).setLabel(btn.label).setEmoji(btn.emoji).setStyle(ButtonStyle.Secondary)
+            );
+            buttonCount++;
+
+            if (buttonCount === 5) {
+                componentsArray.push(currentRow);
+                currentRow = new ActionRowBuilder();
+                buttonCount = 0;
+            }
+        }
+    });
+
+    if (buttonCount > 0) {
+        componentsArray.push(currentRow);
+    }
+
+    const unregRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`absen_unreg_${eventId}`).setLabel('Batal Absen').setStyle(ButtonStyle.Danger)
+    );
+    componentsArray.push(unregRow);
+
+    return componentsArray;
+}
+
+async function processAbsenClick(interaction) {
     try {
+        const parts = interaction.customId.split('_');
+        if (parts[0] !== 'absen') return; 
+
         await interaction.deferUpdate();
 
-        const parts = interaction.customId.split('_');
-        let action = parts.at(0);
-        let eventId;
-        let choice;
+        const action = parts[1]; 
+        const eventId = parts.slice(2).join('_'); 
 
-        if (action === 'status') {
-            eventId = parts.at(1);
-            choice = interaction.values.at(0);
-        } else {
-            choice = parts.at(1);
-            eventId = parts.at(2);
+        const event = absenData[eventId];
+        if (!event) {
+            return interaction.followUp({ content: '❌ Data absen ini sudah kadaluarsa atau error.', ephemeral: true });
         }
 
-        // --- PAGINATION GLOBAL ---
-        if (action === 'page') {
-            let direction = choice; 
-            let pageId = eventId; 
-            let pageData = paginationData[pageId];
-
-            if (!pageData) {
-                return interaction.followUp({ content: '❌ Sesi halaman ini sudah kedaluwarsa.', ephemeral: true });
-            }
-
-            if (interaction.user.id!== pageData.userId) {
-                return interaction.followUp({ content: '❌ Hanya yang merequest command ini yang bisa membalik halaman.', ephemeral: true });
-            }
-
-            if (direction === 'prev') {
-                if (pageData.currentPage > 0) pageData.currentPage--;
-            } else if (direction === 'next') {
-                let maxPage = pageData.pages.length - 1;
-                if (pageData.currentPage < maxPage) pageData.currentPage++;
-            }
-
-            const embed = new EmbedBuilder()
-            .setTitle(pageData.title)
-            .setColor(pageData.color)
-            .setDescription(pageData.pages.at(pageData.currentPage))
-            .setFooter({ text: `Halaman ${pageData.currentPage + 1} dari ${pageData.pages.length} | Total Data: ${pageData.totalItems}` });
-
-            const buttons = generatePaginationButtons(pageId, pageData.currentPage, pageData.pages.length);
-
-            return interaction.editReply({ embeds: new Array(embed), components: new Array(buttons) });
-        }
-
-        if (action === 'admin') {
-            if (choice === 'close') {
-                let hasPerms = interaction.member.permissions.has(PermissionFlagsBits.ManageMessages);
-                if (!hasPerms) {
-                    return interaction.followUp({ content: "❌ You don't have permission to close this event.", ephemeral: true });
-                }
-                const receivedEmbed = interaction.message.embeds.at(0);
-                const closedEmbed = EmbedBuilder.from(receivedEmbed)
-                .setTitle(`🔒 CLOSED - ${receivedEmbed.title}`)
-                .setColor('#E74C3C');
-
-                await interaction.editReply({ embeds: new Array(closedEmbed), components: new Array() });
-                await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, '--- EVENT CLOSED ---', '---', '---');
-                return interaction.followUp({ content: "✅ Event closed successfully! No one else can sign up.", ephemeral: true });
-            }
-        }
-
-        const receivedEmbed = interaction.message.embeds.at(0);
-
-        const lateStatuses = new Array('Late', 'RemoveLate');
-        let isLateStatus = false;
-        if (lateStatuses.includes(choice)) isLateStatus = true;
-
-        if (isLateStatus) {
-            await backupToGoogleSheets(`'${eventId}`, receivedEmbed.title, interaction.member.displayName, null, choice); 
-            return interaction.followUp({ content: "⏱️ Your status has been noted in the spreadsheet!", ephemeral: true });
-        }
-
-        const event = extractEventFromEmbed(receivedEmbed);
         const userName = interaction.member.displayName;
 
         for (const key in event.players) {
-            event.players[key] = event.players[key].filter(name => name!== userName);
+            event.players[key] = event.players[key].filter(name => name !== userName);
         }
 
-        if (event.limits[choice]) {
-            if (event.players[choice].length >= event.limits[choice]) {
-                return interaction.followUp({ content: `❌ Kuota untuk **${choice}** sudah penuh!`, ephemeral: true });
+        if (action !== 'unreg') {
+            if (event.players[action].length >= event.limits[action]) {
+                return interaction.followUp({ content: `❌ Slot untuk role **${action}** sudah penuh!`, ephemeral: true });
             }
+            event.players[action].push(userName);
         }
 
-        event.players[choice].push(userName);
+        const newEmbed = generateAbsenEmbed(eventId);
+        await interaction.editReply({ embeds: [newEmbed] });
 
-        const roleTotal = event.players.LK.length + event.players.BardDancer.length + event.players.Sniper.length + event.players.BioChemist.length + event.players.Mastersmith.length + event.players.Assassin.length + event.players.Professor.length + event.players.HighWizard.length + event.players.Champion.length + event.players.HighPriest.length + event.players.Paladin.length + event.players.DoramPhys.length + event.players.DoramMagic.length;
-        const statusTotal = event.players.Bench.length + event.players.Absent.length;
-        const grandTotal = roleTotal + statusTotal;
-
-        const oldFooter = receivedEmbed.footer.text;
-        const timeLine = oldFooter.split('\n').at(2); 
-
-        const newEmbed = generateDynamicEmbed(eventId, event, receivedEmbed.description, timeLine);
-        const newComponents = generateDynamicComponents(eventId, event); 
-
-        await interaction.editReply({ embeds: new Array(newEmbed), components: newComponents });
-
-        if (action === 'status') {
-            await backupToGoogleSheets(`'${eventId}`, event.title, userName, null, choice); 
-        } else {
-            await backupToGoogleSheets(`'${eventId}`, event.title, userName, choice, null); 
+        if (action === 'unreg') {
+            await interaction.followUp({ content: "✅ Kamu berhasil membatalkan absen.", ephemeral: true });
         }
 
     } catch (error) {
-        console.log("CLICK ERROR:", error);
-        let isAlreadyReplied = false;
-        if (interaction.deferred) isAlreadyReplied = true;
-        if (interaction.replied) isAlreadyReplied = true;
-
-        if (isAlreadyReplied) {
+        console.log("ABSEN CLICK ERROR:", error);
+        if (interaction.deferred || interaction.replied) {
             await interaction.followUp({ content: `❌ Error caught: ${error.message}`, ephemeral: true }).catch(console.error);
         } else {
             await interaction.reply({ content: `❌ Error caught: ${error.message}`, ephemeral: true }).catch(console.error);
@@ -630,235 +637,58 @@ async function processClick(interaction, isButton) {
     }
 }
 
-// ==========================================
-// FUNGSI PENDUKUNG EMBED DAN KOMPONEN
-// ==========================================
+// --- FUNGSI LAMA RAID BOT BAWAH SINI ---
+function generateRaidEmbed(eventId) {
+    const event = raidData[eventId];
+    const formatList = (list) => list.length > 0 ? list.join('\n') : '-';
 
-function extractEventFromEmbed(receivedEmbed) {
-    const fields = receivedEmbed.fields;
+    const timeDisplay = `<t:${event.time}:d>`;
+    const exactTime = `<t:${event.time}:t>`;
+    const relativeTime = `<t:${event.time}:R>`;
 
-    const getFieldData = (label) => {
-        const field = fields.find(f => f.name.includes(label));
-        let isMissing = false;
-        if (!field) {
-            isMissing = true;
-        } else if (field.value === '-') {
-            isMissing = true;
-        }
-
-        if (isMissing) {
-            return new Array();
-        }
-        return field.value.split('\n');
-    };
-
-    const getLimit = (label) => {
-        const field = fields.find(f => f.name.includes(label));
-        if (!field) return 0;
-        const match = field.name.match(/\d+\/(\d+)\)/);
-        if (match) {
-            return parseInt(match[1]);
-        }
-        return 0;
-    };
-
-    return {
-        title: receivedEmbed.title,
-        limits: {
-            LK: getLimit('LK'),
-            BardDancer: getLimit('Bard/Dancer'),
-            Sniper: getLimit('Sniper'),
-            BioChemist: getLimit('Bio Chemist'),
-            Mastersmith: getLimit('Mastersmith'),
-            Assassin: getLimit('Assassin'),
-            Professor: getLimit('Professor'),
-            HighWizard: getLimit('High Wizard'),
-            Champion: getLimit('Champion'),
-            HighPriest: getLimit('High Priest'),
-            Paladin: getLimit('Paladin'),
-            DoramPhys: getLimit('Doram Phys'),
-            DoramMagic: getLimit('Doram Magic')
-        },
-        players: {
-            LK: getFieldData('LK'),
-            BardDancer: getFieldData('Bard/Dancer'),
-            Sniper: getFieldData('Sniper'),
-            BioChemist: getFieldData('Bio Chemist'),
-            Mastersmith: getFieldData('Mastersmith'),
-            Assassin: getFieldData('Assassin'),
-            Professor: getFieldData('Professor'),
-            HighWizard: getFieldData('High Wizard'),
-            Champion: getFieldData('Champion'),
-            HighPriest: getFieldData('High Priest'),
-            Paladin: getFieldData('Paladin'),
-            DoramPhys: getFieldData('Doram Phys'),
-            DoramMagic: getFieldData('Doram Magic'),
-            Bench: getFieldData('Bench'),
-            Absent: getFieldData('Absent')
-        }
-    };
+    return new EmbedBuilder()
+    .setTitle(event.title)
+    .setColor('#F1C40F')
+    .setDescription(`**Event Info:**\n📅 ${timeDisplay}\n🕒 ${exactTime} - None\n\n`)
+    .addFields(
+            { name: `🎯 Sniper (0/${event.limits.Sniper})`, value: '-', inline: true },
+            { name: `⛑️ Priest (0/${event.limits.Priest})`, value: '-', inline: true },
+            { name: `🛡️ Paladin (0/${event.limits.Paladin})`, value: '-', inline: true },
+            { name: `🎸 DancerBard (0/${event.limits.DancerBard})`, value: '-', inline: true },
+            { name: `🧪 Bio (0/${event.limits.Bio})`, value: '-', inline: true },
+            { name: '\u200b', value: '----------------------------------------', inline: false },
+            { name: `🪑 Bench (0)`, value: '-', inline: true },
+            { name: `🅰️ Absent (0)`, value: '-', inline: true }
+        )
+    .setFooter({ text: `Sign ups: Total: 0 - Role: 0 - Status: 0\nEvent ID: ${eventId}\nEvent start time • ${relativeTime}` });
 }
 
-function generateDynamicEmbed(eventId, event, description, timeLine) {
-    const formatList = (list) => list.length > 0? list.join('\n') : '-';
-    let roleTotal = 0;
+function generateRaidComponents(eventId) {
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`role_Sniper_${eventId}`).setLabel('Sniper').setEmoji('🎯').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_Priest_${eventId}`).setLabel('Priest').setEmoji('⛑️').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_Paladin_${eventId}`).setLabel('Paladin').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_DancerBard_${eventId}`).setLabel('DancerBard').setEmoji('🎸').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`role_Bio_${eventId}`).setLabel('Bio').setEmoji('🧪').setStyle(ButtonStyle.Secondary)
+    );
 
-    const newEmbed = new EmbedBuilder()
-   .setTitle(event.title)
-   .setColor('#F1C40F')
-   .setDescription(description);
-
-    JOBS.forEach(job => {
-        if (event.limits[job.id] > 0) {
-            newEmbed.addFields({
-                name: `${job.emoji} ${job.label} (${event.players[job.id].length}/${event.limits[job.id]})`,
-                value: formatList(event.players[job.id]),
-                inline: true
-            });
-            roleTotal += event.players[job.id].length;
-        }
-    });
-
-    newEmbed.addFields({ name: '\u200b', value: '----------------------------------------', inline: false });
-    newEmbed.addFields({ name: `🪑 Bench (${event.players.Bench.length})`, value: formatList(event.players.Bench), inline: true });
-    newEmbed.addFields({ name: `🅰️ Absent (${event.players.Absent.length})`, value: formatList(event.players.Absent), inline: true });
-
-    const statusTotal = event.players.Bench.length + event.players.Absent.length;
-    const grandTotal = roleTotal + statusTotal;
-
-    newEmbed.setFooter({ text: `Sign ups: Total: ${grandTotal} - Role: ${roleTotal} - Status: ${statusTotal}\nEvent ID: ${eventId}\n${timeLine}` });
-    return newEmbed;
-}
-
-function generateDynamicComponents(eventId, event) {
-    const allRows = new Array();
-    const buttonBuffer = new Array();
-
-    JOBS.forEach(job => {
-        if (event.limits[job.id] > 0) {
-            buttonBuffer.push(
-                new ButtonBuilder()
-               .setCustomId(`role_${job.id}_${eventId}`)
-               .setLabel(job.label)
-               .setEmoji(job.customId)
-               .setStyle(ButtonStyle.Secondary)
-            );
-        }
-    });
-
-    for (let i = 0; i < buttonBuffer.length; i += 5) {
-        let chunk = buttonBuffer.slice(i, i + 5);
-        allRows.push(new ActionRowBuilder().addComponents(chunk));
-    }
-
-    allRows.push(new ActionRowBuilder().addComponents(
+    const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-       .setCustomId(`status_${eventId}`)
-       .setPlaceholder('Select a status')
-       .addOptions(
+        .setCustomId(`status_${eventId}`)
+        .setPlaceholder('Select a status')
+        .addOptions(
                 { label: 'Bench', value: 'Bench', emoji: '🪑' },
                 { label: 'Absent', value: 'Absent', emoji: '🅰️' },
                 { label: 'Remove Late', value: 'RemoveLate', emoji: '❌' },
                 { label: 'Late (+5 min)', value: 'Late', emoji: '⏱️' }
-            )
-    ));
-
-    allRows.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`admin_close_${eventId}`).setLabel('Close Event').setEmoji('🔒').setStyle(ButtonStyle.Danger)
-    ));
-
-    return allRows;
-}
-
-function generatePaginationButtons(pageId, currentPage, totalPages) {
-    let prevDisabled = false;
-    if (currentPage === 0) {
-        prevDisabled = true; 
-    }
-
-    let nextDisabled = false;
-    let lastPage = totalPages - 1;
-    if (currentPage === lastPage) {
-        nextDisabled = true; 
-    }
-
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-       .setCustomId(`page_prev_${pageId}`)
-       .setLabel('◀ Previous')
-       .setStyle(ButtonStyle.Primary)
-       .setDisabled(prevDisabled),
-        new ButtonBuilder()
-       .setCustomId(`page_next_${pageId}`)
-       .setLabel('Next ▶')
-       .setStyle(ButtonStyle.Primary)
-       .setDisabled(nextDisabled)
+           )
     );
 
-    return row;
-}
+    const adminControls = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`admin_close_${eventId}`).setLabel('Close Event').setEmoji('🔒').setStyle(ButtonStyle.Danger)
+    );
 
-async function backupToGoogleSheets(eventId, eventTitle, username, role, note) {
-    const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-    const key = process.env.GOOGLE_PRIVATE_KEY;
-    const sheetId = process.env.GOOGLE_SHEET_ID;
-
-    let isConfigured = false;
-    if (email && key && sheetId) isConfigured = true;
-    if (!isConfigured) return;
-
-    try {
-        const serviceAccountAuth = new JWT({
-            email: email,
-            key: key.replace(/\\n/g, '\n'),
-            scopes: new Array('https://www.googleapis.com/auth/spreadsheets'),
-        });
-        
-        const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
-        await doc.loadInfo();
-        const sheet = doc.sheetsByIndex.at(0); 
-        
-        const rows = await sheet.getRows();
-        const safeEventId = String(eventId).replace("'", "");
-        
-        let existingRow;
-        for (let i = 0; i < rows.length; i++) {
-            let rowId = String(rows.at(i).get('EventID')).replace("'", "");
-            let rowUser = rows.at(i).get('User');
-            if (rowId === safeEventId && rowUser === username) {
-                existingRow = rows.at(i);
-            }
-        }
-
-        if (existingRow) {
-            if (role) existingRow.set('Role', role);
-            if (note) {
-                if (note === 'RemoveLate') {
-                    existingRow.set('Note', ''); 
-                } else {
-                    existingRow.set('Note', note); 
-                }
-            }
-            existingRow.set('Title', eventTitle);
-            existingRow.set('Time', new Date().toLocaleString());
-            await existingRow.save(); 
-        } else {
-            let initialNote = '';
-            if (note && note!== 'RemoveLate') initialNote = note;
-            let initialRole = role? role : '';
-
-            await sheet.addRow({ 
-                EventID: eventId, 
-                Title: eventTitle, 
-                User: username, 
-                Role: initialRole, 
-                Note: initialNote,
-                Time: new Date().toLocaleString() 
-            });
-        }
-    } catch (error) {
-        console.log("Google Sheets Error:", error);
-    }
+    return [buttons, selectMenu, adminControls];
 }
 
 client.login(process.env.DISCORD_TOKEN).catch(error => {
