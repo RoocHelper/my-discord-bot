@@ -259,7 +259,8 @@ client.on('interactionCreate', async (interaction) => {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 return interaction.reply({ content: "❌ Kamu tidak memiliki izin (Administrator) untuk menjalankan ini.", ephemeral: true });
             }
-            await sendMassDM(interaction, 0, "Bid Utama");
+            // Menggunakan index 1 karena "GL ETERNAL MONARCH" ada di tab ke-2
+            await sendMassDM(interaction, 1, "Bid Utama");
         }
 
         // --- COMMAND NOTIFY LEAGUE (ADMIN ONLY) ---
@@ -275,7 +276,8 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.commandName === 'cekbidall' || interaction.commandName === 'cekleagueall') {
             await interaction.deferReply({ ephemeral: true });
             
-            let sheetIndex = interaction.commandName === 'cekbidall' ? 0 : 2;
+            // Menggunakan index 1 karena "GL ETERNAL MONARCH" ada di tab ke-2
+            let sheetIndex = interaction.commandName === 'cekbidall' ? 1 : 2;
             let titleSource = interaction.commandName === 'cekbidall' ? "Bid List Utama" : "League Prize";
 
             try {
@@ -368,7 +370,8 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.commandName === 'cekbid' || interaction.commandName === 'cekleague') {
             await interaction.deferReply({ ephemeral: true }); 
 
-            let sheetIndex = interaction.commandName === 'cekbid' ? 0 : 2;
+            // Menggunakan index 1 karena "GL ETERNAL MONARCH" ada di tab ke-2
+            let sheetIndex = interaction.commandName === 'cekbid' ? 1 : 2;
             let titleSource = interaction.commandName === 'cekbid' ? "Bid List" : "League Prize";
 
             const username = interaction.member.displayName.toLowerCase();
