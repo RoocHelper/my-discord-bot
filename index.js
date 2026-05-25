@@ -366,7 +366,7 @@ client.on('interactionCreate', async (interaction) => {
 
         // --- COMMAND CEK BID DIRI SENDIRI ---
         if (interaction.commandName === 'cekbid' || interaction.commandName === 'cekleague') {
-            await interaction.deferReply(); 
+            await interaction.deferReply({ ephemeral: true }); 
 
             let sheetIndex = interaction.commandName === 'cekbid' ? 0 : 2;
             let titleSource = interaction.commandName === 'cekbid' ? "Bid List" : "League Prize";
