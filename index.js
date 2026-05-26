@@ -10,8 +10,6 @@ app.get('/', (req, res) => res.send('My bot is awake!'));
 let port = process.env.PORT || 3000;
 app.listen(port, () => console.log('Web server started'));
 
-// PENTING: Tambahkan GatewayIntentBits.GuildMembers
-// Pastikan "Server Members Intent" dinyalakan di Discord Developer Portal
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -114,7 +112,6 @@ async function accessSpreadsheet(sheetIndex) {
     return doc.sheetsByIndex[sheetIndex];
 }
 
-// Fungsi Delay untuk mencegah rate limit DM
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 async function sendMassDM(interaction, sheetIndex, listName) {
@@ -128,7 +125,6 @@ async function sendMassDM(interaction, sheetIndex, listName) {
             return interaction.editReply({ content: `❌ Sheet ${listName} kosong.` });
         }
 
-        // Kelompokkan data berdasarkan player
         const playerBids = {};
         rows.forEach(row => {
             const playerRaw = row.get('Player yang Bid') || row.get('Player Yang Bid');
@@ -138,8 +134,9 @@ async function sendMassDM(interaction, sheetIndex, listName) {
             if (player === '-' || player === '') return;
 
             const playerNameLowerCase = player.toLowerCase();
-            const halaman = row.get('Halaman') || row.get('Hal');
-            const item = row.get('Nama Item (Otomatis)') || row.get('Nama Barang');
+            const halaman = row.get('Halaman') || row.get('Hal') || '?';
+            const slot = row.get('Slot') || '-';
+            const item = row.get('Nama Item (Otomatis)') || row.get('Nama Barang') || 'Unknown';
 
             if (!playerBids[playerNameLowerCase]) {
                 playerBids[playerNameLowerCase] = {
@@ -147,10 +144,9 @@ async function sendMassDM(interaction, sheetIndex, listName) {
                     items: []
                 };
             }
-            playerBids[playerNameLowerCase].items.push(`• **${item}** (Halaman ${halaman})`);
+            playerBids[playerNameLowerCase].items.push(`• **${item}** (Hal: ${halaman} | Slot: ${slot})`);
         });
 
-        // Ambil SEMUA member di server (Butuh Server Members Intent nyala!)
         const guildMembers = await interaction.guild.members.fetch();
         
         let successCount = 0;
@@ -160,7 +156,6 @@ async function sendMassDM(interaction, sheetIndex, listName) {
         await interaction.editReply({ content: `⏳ Sedang memproses DM untuk daftar **${listName}**... Tolong jangan gunakan command ini lagi sampai selesai agar bot tidak error. Proses ini membutuhkan waktu sekitar ${Object.keys(playerBids).length * 2} detik.` });
 
         for (const [playerNameLowerCase, data] of Object.entries(playerBids)) {
-            // Cari member yang cocok namanya (Username, Nickname Server, atau Global Name)
             const targetMember = guildMembers.find(m => 
                 m.user.username.toLowerCase() === playerNameLowerCase ||
                 (m.displayName && m.displayName.toLowerCase() === playerNameLowerCase) ||
@@ -178,17 +173,14 @@ async function sendMassDM(interaction, sheetIndex, listName) {
                     await targetMember.send({ embeds: [dmEmbed] });
                     successCount++;
                 } catch (dmError) {
-                    // Terjadi jika user menonaktifkan DM
                     failCount++;
                     failNames.push(`${data.originalName} (DM Tertutup)`);
                 }
             } else {
-                // Terjadi jika nama di Excel tidak sama dengan di Discord
                 failCount++;
                 failNames.push(`${data.originalName} (Tidak ditemukan di server)`);
             }
 
-            // Jeda 2 detik setiap pengiriman agar tidak di-banned spam oleh Discord
             await delay(2000); 
         }
 
@@ -255,11 +247,9 @@ client.on('interactionCreate', async (interaction) => {
 
         // --- COMMAND NOTIFY BID (ADMIN ONLY) ---
         if (interaction.commandName === 'notifybid') {
-            // Pengecekan admin ganda meskipun sudah di limit via command
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 return interaction.reply({ content: "❌ Kamu tidak memiliki izin (Administrator) untuk menjalankan ini.", ephemeral: true });
             }
-            // Menggunakan index 1 karena "GL ETERNAL MONARCH" ada di tab ke-2
             await sendMassDM(interaction, 1, "Bid Utama");
         }
 
@@ -268,7 +258,6 @@ client.on('interactionCreate', async (interaction) => {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 return interaction.reply({ content: "❌ Kamu tidak memiliki izin (Administrator) untuk menjalankan ini.", ephemeral: true });
             }
-            // Sheet League Prize ada di Index 2
             await sendMassDM(interaction, 2, "League Prize");
         }
 
@@ -276,7 +265,6 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.commandName === 'cekbidall' || interaction.commandName === 'cekleagueall') {
             await interaction.deferReply({ ephemeral: true });
             
-            // Menggunakan index 1 karena "GL ETERNAL MONARCH" ada di tab ke-2
             let sheetIndex = interaction.commandName === 'cekbidall' ? 1 : 2;
             let titleSource = interaction.commandName === 'cekbidall' ? "Bid List Utama" : "League Prize";
 
@@ -291,11 +279,12 @@ client.on('interactionCreate', async (interaction) => {
                 let allBids = [];
                 rows.forEach(row => {
                     const player = row.get('Player yang Bid') || row.get('Player Yang Bid');
-                    const halaman = row.get('Halaman') || row.get('Hal');
-                    const item = row.get('Nama Item (Otomatis)') || row.get('Nama Barang');
+                    const halaman = row.get('Halaman') || row.get('Hal') || '?';
+                    const slot = row.get('Slot') || '-';
+                    const item = row.get('Nama Item (Otomatis)') || row.get('Nama Barang') || 'Unknown';
 
                     if (player && player !== '-' && player !== '') {
-                        allBids.push(`**${player}** - Halaman ${halaman}: ${item}`);
+                        allBids.push(`**${player}** - Hal: ${halaman}, Slot: ${slot} - ${item}`);
                     }
                 });
 
@@ -340,7 +329,7 @@ client.on('interactionCreate', async (interaction) => {
                 });
 
                 if (totalPages > 1) {
-                    const collector = message.createMessageComponentCollector({ time: 600000 }); // 10 menit
+                    const collector = message.createMessageComponentCollector({ time: 600000 }); 
 
                     collector.on('collect', async (i) => {
                         if (i.customId === `prev_page_${interaction.commandName}` && currentPage > 0) {
@@ -370,7 +359,6 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.commandName === 'cekbid' || interaction.commandName === 'cekleague') {
             await interaction.deferReply({ ephemeral: true }); 
 
-            // Menggunakan index 1 karena "GL ETERNAL MONARCH" ada di tab ke-2
             let sheetIndex = interaction.commandName === 'cekbid' ? 1 : 2;
             let titleSource = interaction.commandName === 'cekbid' ? "Bid List" : "League Prize";
 
@@ -388,9 +376,10 @@ client.on('interactionCreate', async (interaction) => {
                     if (player) {
                         const playerLowerCase = player.toString().toLowerCase();
                         if (playerLowerCase === username || playerLowerCase === discordName) {
-                            const halaman = row.get('Halaman') || row.get('Hal');
-                            const item = row.get('Nama Item (Otomatis)') || row.get('Nama Barang');
-                            foundBids.push(`- **Halaman ${halaman}**: ${item}`);
+                            const halaman = row.get('Halaman') || row.get('Hal') || '?';
+                            const slot = row.get('Slot') || '-';
+                            const item = row.get('Nama Item (Otomatis)') || row.get('Nama Barang') || 'Unknown';
+                            foundBids.push(`- **${item}** (Hal: ${halaman} | Slot: ${slot})`);
                         }
                     }
                 });
