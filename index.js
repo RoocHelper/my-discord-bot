@@ -80,7 +80,7 @@ client.once('ready', async () => {
         },
         {
             name: 'notifybid',
-            description: '[ADMIN ONLY] Kirim DM peringatan ke semua member di list Bid Utama',
+            description: '[ADMIN ONLY] Kirim DM peringatan ke semua member di list Guild League',
             default_member_permissions: String(PermissionFlagsBits.Administrator)
         },
         {
@@ -250,7 +250,7 @@ client.on('interactionCreate', async (interaction) => {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 return interaction.reply({ content: "❌ Kamu tidak memiliki izin (Administrator) untuk menjalankan ini.", ephemeral: true });
             }
-            await sendMassDM(interaction, 1, "Bid Utama");
+            await sendMassDM(interaction, 1, "Guild League");
         }
 
         // --- COMMAND NOTIFY LEAGUE (ADMIN ONLY) ---
