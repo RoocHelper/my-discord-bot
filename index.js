@@ -62,31 +62,23 @@ client.once('ready', async () => {
                 { name: 'doram_magic', description: 'Jumlah max Doram Magic (0 jika tidak ada)', type: 4, required: true }
             ]
         },
-        {
-            name: 'cekbid',
-            description: 'Cek jadwal dan barang apa saja yang kamu bid dari Google Sheets'
-        },
-        {
-            name: 'cekbidall',
-            description: 'Cek seluruh list bid dari Google Sheets (Hanya terlihat olehmu)'
-        },
-        {
-            name: 'cekleague',
-            description: 'Cek barang apa saja yang kamu dapat dari League Prize'
-        },
-        {
-            name: 'cekleagueall',
-            description: 'Cek seluruh list League Prize (Hanya terlihat olehmu)'
-        },
+        { name: 'cekbid', description: 'Cek jadwal dan barang apa saja yang kamu bid dari Google Sheets' },
+        { name: 'cekbidall', description: 'Cek seluruh list bid dari Google Sheets (Hanya terlihat olehmu)' },
+        { name: 'cekleague', description: 'Cek barang apa saja yang kamu dapat dari League Prize' },
+        { name: 'cekleagueall', description: 'Cek seluruh list League Prize (Hanya terlihat olehmu)' },
         {
             name: 'notifybid',
-            description: '[ADMIN ONLY] Kirim DM peringatan ke semua member di list Guild League',
+            description: '[ADMIN ONLY] Kirim DM peringatan ke semua member di list Bid Utama',
             default_member_permissions: String(PermissionFlagsBits.Administrator)
         },
         {
             name: 'notifyleague',
             description: '[ADMIN ONLY] Kirim DM peringatan ke semua member di list League Prize',
             default_member_permissions: String(PermissionFlagsBits.Administrator)
+        },
+        {
+            name: 'battlepass',
+            description: 'Pilih dan simpan level Battle Pass kamu (x0 sampai x6)' // <--- COMMAND BARU
         }
     ]);
     console.log('Commands created!');
@@ -109,7 +101,13 @@ async function accessSpreadsheet(sheetIndex) {
 
     const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
     await doc.loadInfo();
-    return doc.sheetsByIndex[sheetIndex];
+    
+    // Jika mengakses berdasarkan index
+    if (typeof sheetIndex === 'number') {
+        return doc.sheetsByIndex[sheetIndex];
+    }
+    // Jika mengakses berdasarkan nama tab (title)
+    return doc.sheetsByTitle[sheetIndex];
 }
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
@@ -206,6 +204,30 @@ async function sendMassDM(interaction, sheetIndex, listName) {
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         
+        // --- COMMAND BATTLEPASS ---
+        if (interaction.commandName === 'battlepass') {
+            await interaction.deferReply({ ephemeral: true }); // Private reply
+            
+            const row1 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('bp_x0').setLabel('x0').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('bp_x1').setLabel('x1').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('bp_x2').setLabel('x2').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('bp_x3').setLabel('x3').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('bp_x4').setLabel('x4').setStyle(ButtonStyle.Primary)
+            );
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('bp_x5').setLabel('x5').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('bp_x6').setLabel('x6').setStyle(ButtonStyle.Primary)
+            );
+
+            const embed = new EmbedBuilder()
+                .setTitle('🎟️ Pendaftaran Battle Pass')
+                .setDescription('Halo! Silakan pilih level Battle Pass yang kamu miliki dengan menekan salah satu tombol di bawah ini.\n\nData kamu akan otomatis tersimpan di database Guild.')
+                .setColor('#9B59B6');
+
+            return interaction.editReply({ embeds: [embed], components: [row1, row2] });
+        }
+
         // --- COMMAND ABSEN ---
         if (interaction.commandName === 'absen') {
             await interaction.deferReply();
@@ -250,7 +272,7 @@ client.on('interactionCreate', async (interaction) => {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 return interaction.reply({ content: "❌ Kamu tidak memiliki izin (Administrator) untuk menjalankan ini.", ephemeral: true });
             }
-            await sendMassDM(interaction, 1, "Guild League");
+            await sendMassDM(interaction, 1, "Bid Utama");
         }
 
         // --- COMMAND NOTIFY LEAGUE (ADMIN ONLY) ---
@@ -482,6 +504,48 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isButton()) {
+        // --- BUTTON BATTLEPASS LOGIC ---
+        if (interaction.customId.startsWith('bp_')) {
+            await interaction.deferUpdate();
+            
+            const selection = interaction.customId.split('_')[1]; // mengambil 'x0', 'x1', dll
+            const userName = interaction.member ? interaction.member.displayName : interaction.user.username;
+
+            try {
+                // Mengambil Sheet7 berdasarkan namanya agar aman
+                const sheet = await accessSpreadsheet('Sheet7');
+                if (!sheet) {
+                    return interaction.followUp({ content: "❌ Tab 'Sheet7' tidak ditemukan di spreadsheet.", ephemeral: true });
+                }
+
+                const rows = await sheet.getRows();
+                // Cari apakah nama Discord sudah ada di kolom Discord
+                const existingRow = rows.find(r => r.get('Discord') === userName);
+
+                if (existingRow) {
+                    existingRow.set('Battle Pass', selection);
+                    await existingRow.save();
+                } else {
+                    await sheet.addRow({
+                        'Discord': userName,
+                        'Battle Pass': selection
+                    });
+                }
+
+                const confirmEmbed = new EmbedBuilder()
+                    .setTitle('✅ Data Tersimpan!')
+                    .setDescription(`Data Battle Pass kamu berhasil diupdate:\n👤 **Discord:** ${userName}\n🎟️ **Battle Pass:** ${selection}`)
+                    .setColor('#2ECC71');
+
+                await interaction.editReply({ embeds: [confirmEmbed], components: [] });
+
+            } catch (error) {
+                console.error("Battlepass Button Error:", error);
+                await interaction.followUp({ content: '❌ Terjadi kesalahan saat menyimpan data ke spreadsheet.', ephemeral: true });
+            }
+            return;
+        }
+
         if (interaction.customId.startsWith('prev_page_') || interaction.customId.startsWith('next_page_')) {
             return; 
         }
